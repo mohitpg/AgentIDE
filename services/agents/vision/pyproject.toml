@@ -1,0 +1,18 @@
+[project]
+name = "agentide-agent-vision"
+version = "0.1.0"
+description = "Vision agent – analyze-image, OCR, diagram-to-code (Phase 5)"
+requires-python = ">=3.12"
+dependencies = [
+    "agentide-agent-common",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_vision"]
+
+[tool.uv.sources]
+agentide-agent-common = { workspace = true }

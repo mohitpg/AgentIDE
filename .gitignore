@@ -1,0 +1,52 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.venv/
+.env
+.env.local
+.env.*.local
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ── uv ──────────────────────────────────────────────────────────────────────
+# uv.lock IS committed – do not add it here
+
+# ── Node / Electron ──────────────────────────────────────────────────────────
+node_modules/
+out/
+dist/
+.DS_Store
+*.local
+npm-debug.log*
+yarn-error.log
+.pnpm-debug.log
+
+# ── Electron build output ────────────────────────────────────────────────────
+apps/desktop/dist/
+apps/desktop/out/
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.orig
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/

@@ -1,0 +1,19 @@
+[project]
+name = "agentide-mcp"
+version = "0.1.0"
+description = "MCP manager: server lifecycle, capability discovery, per-agent tool allow-lists"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0",
+    "agentide-schemas",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_manager"]
+
+[tool.uv.sources]
+agentide-schemas = { workspace = true }

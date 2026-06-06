@@ -1,0 +1,19 @@
+[project]
+name = "agentide-agent-web"
+version = "0.1.0"
+description = "Web search agent – search, fetch, extract, synthesize (Phase 5)"
+requires-python = ">=3.12"
+dependencies = [
+    "agentide-agent-common",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_web"]
+
+[tool.uv.sources]
+agentide-agent-common = { workspace = true }

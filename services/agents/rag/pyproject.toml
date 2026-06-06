@@ -1,0 +1,20 @@
+[project]
+name = "agentide-agent-rag"
+version = "0.1.0"
+description = "RAG agent – retrieve, rerank, cite, answer-with-context (Phase 4)"
+requires-python = ">=3.12"
+dependencies = [
+    "agentide-agent-common",
+    "agentide-rag",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_rag"]
+
+[tool.uv.sources]
+agentide-agent-common = { workspace = true }
+agentide-rag = { workspace = true }

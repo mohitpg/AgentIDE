@@ -1,0 +1,37 @@
+# ── uv workspace root (virtual – no package here) ──────────────────────────
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "services/orchestrator",
+    "services/agents/common",
+    "services/agents/code",
+    "services/agents/summarizer",
+    "services/agents/vision",
+    "services/agents/rag",
+    "services/agents/web",
+    "services/agents/indexer",
+    "services/workers",
+    "packages/schemas",
+    "packages/rag",
+    "packages/mcp",
+]
+
+# ── shared tool config (applies to the whole workspace) ────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

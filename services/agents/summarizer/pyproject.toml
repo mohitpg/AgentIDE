@@ -1,0 +1,18 @@
+[project]
+name = "agentide-agent-summarizer"
+version = "0.1.0"
+description = "Summarizer agent – summarize-file, summarize-thread, tl;dr (Phase 2)"
+requires-python = ">=3.12"
+dependencies = [
+    "agentide-agent-common",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_summarizer"]
+
+[tool.uv.sources]
+agentide-agent-common = { workspace = true }
