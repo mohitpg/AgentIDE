@@ -8,7 +8,8 @@ The A2A server (create_agent_app) wires HTTP routes automatically.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from schemas.a2a import AgentCard, Skill
 

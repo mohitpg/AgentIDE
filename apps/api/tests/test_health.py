@@ -32,4 +32,4 @@ async def test_health_checks_keys(client: AsyncClient) -> None:
     assert "api" in checks
     assert "db" in checks
     assert "redis" in checks
-    assert checks["api"] == "ok"   # API itself is always ok
+    assert checks["api"] == "ok"  # API itself is always ok

@@ -10,9 +10,8 @@ available in the test environment.
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from api.main import app
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture

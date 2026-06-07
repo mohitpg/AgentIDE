@@ -15,13 +15,13 @@ from pydantic import BaseModel, Field
 
 
 class EventType(StrEnum):
-    TOKEN = "token"               # LLM token chunk
-    AGENT_STEP = "agent_step"     # LangGraph node entry/exit
-    TOOL_CALL = "tool_call"       # MCP / native tool invoked
-    TOOL_RESULT = "tool_result"   # Tool response
+    TOKEN = "token"  # LLM token chunk
+    AGENT_STEP = "agent_step"  # LangGraph node entry/exit
+    TOOL_CALL = "tool_call"  # MCP / native tool invoked
+    TOOL_RESULT = "tool_result"  # Tool response
     TASK_PROGRESS = "task_progress"  # Celery async task progress
-    ERROR = "error"               # Recoverable or fatal error
-    DONE = "done"                 # Run complete
+    ERROR = "error"  # Recoverable or fatal error
+    DONE = "done"  # Run complete
 
 
 class StreamEvent(BaseModel):

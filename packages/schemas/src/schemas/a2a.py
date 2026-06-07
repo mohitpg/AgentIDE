@@ -30,12 +30,12 @@ class SkillOutput(BaseModel):
 class Skill(BaseModel):
     """One capability an agent exposes."""
 
-    id: str                        # e.g. "summarize-file"
-    name: str                      # human-readable
+    id: str  # e.g. "summarize-file"
+    name: str  # human-readable
     description: str
     input_schema: SkillInput = Field(default_factory=SkillInput)
     output_schema: SkillOutput = Field(default_factory=SkillOutput)
-    streaming: bool = False        # agent streams tokens for this skill
+    streaming: bool = False  # agent streams tokens for this skill
     tags: list[str] = Field(default_factory=list)
 
 
@@ -45,11 +45,11 @@ class AgentCard(BaseModel):
     The registry indexes these so the supervisor can discover skills.
     """
 
-    id: str                        # unique agent id, e.g. "summarizer"
+    id: str  # unique agent id, e.g. "summarizer"
     name: str
     description: str
     version: str = "0.1.0"
-    url: HttpUrl                   # base URL for A2A calls
+    url: HttpUrl  # base URL for A2A calls
     skills: list[Skill]
     auth: Literal["none", "bearer"] = "bearer"
     tags: list[str] = Field(default_factory=list)

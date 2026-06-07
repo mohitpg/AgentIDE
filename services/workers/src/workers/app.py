@@ -39,10 +39,10 @@ celery_app = Celery(
 default_exchange = Exchange("agentide", type="direct")
 
 celery_app.conf.task_queues = (
-    Queue("default",  default_exchange, routing_key="default"),
+    Queue("default", default_exchange, routing_key="default"),
     Queue("indexing", default_exchange, routing_key="indexing"),
-    Queue("vision",   default_exchange, routing_key="vision"),
-    Queue("web",      default_exchange, routing_key="web"),
+    Queue("vision", default_exchange, routing_key="vision"),
+    Queue("web", default_exchange, routing_key="web"),
 )
 celery_app.conf.task_default_queue = "default"
 celery_app.conf.task_default_exchange = "agentide"
@@ -51,8 +51,8 @@ celery_app.conf.task_default_routing_key = "default"
 # ── Routing rules ────────────────────────────────────────────────────────────
 celery_app.conf.task_routes = {
     "workers.tasks.indexing.*": {"queue": "indexing"},
-    "workers.tasks.vision.*":   {"queue": "vision"},
-    "workers.tasks.web.*":      {"queue": "web"},
+    "workers.tasks.vision.*": {"queue": "vision"},
+    "workers.tasks.web.*": {"queue": "web"},
 }
 
 # ── Serialization & misc ─────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_acks_late=True,              # ack only on success/failure, not on receive
-    worker_prefetch_multiplier=1,     # fair dispatch for long tasks
-    result_expires=3600,              # results live 1 h in Redis
+    task_acks_late=True,  # ack only on success/failure, not on receive
+    worker_prefetch_multiplier=1,  # fair dispatch for long tasks
+    result_expires=3600,  # results live 1 h in Redis
 )

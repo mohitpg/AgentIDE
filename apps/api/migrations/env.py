@@ -10,16 +10,15 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-
+import api.models  # noqa: F401 – ensure all models are registered on Base.metadata
 from alembic import context
 
 # ── Load app config & models ─────────────────────────────────────────────────
 from api.config import get_settings
 from api.db.base import Base
-import api.models  # noqa: F401 – ensure all models are registered on Base.metadata
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # ── Alembic config object ─────────────────────────────────────────────────────
 config = context.config
