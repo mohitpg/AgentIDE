@@ -11,14 +11,23 @@ Routers added here grow with each phase:
 
 from __future__ import annotations
 
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+# psycopg's async pool (used by the LangGraph Postgres checkpointer) cannot run
+# on Windows' default ProactorEventLoop. Select the SelectorEventLoop before
+# uvicorn creates its loop. Must run before any event loop is started.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from api.config import get_settings
-from api.db.session import engine
-from api.routers import health
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from orchestrator import LLMConfig, Orchestrator  # noqa: E402
+
+from api.config import get_settings  # noqa: E402
+from api.db.session import engine  # noqa: E402
+from api.routers import chat, health, sessions  # noqa: E402
 
 settings = get_settings()
 
@@ -26,8 +35,20 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     # ── Startup ──────────────────────────────────────────────────────────────
+    orchestrator = Orchestrator(
+        LLMConfig(
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            max_tokens=settings.llm_max_tokens,
+            temperature=settings.llm_temperature,
+        ),
+        checkpointer_conn_string=settings.database_url_psycopg,
+    )
+    await orchestrator.startup()
+    app.state.orchestrator = orchestrator
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────────
+    await orchestrator.shutdown()
     await engine.dispose()
 
 
@@ -51,8 +72,8 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(health.router, prefix="/health", tags=["health"])
+app.include_router(chat.router, prefix="/chat", tags=["chat"])
+app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 
-# Phase 1+: uncomment as you implement each router
-# from api.routers import chat, sessions, agents, tasks, rag, projects, mcp
-# app.include_router(chat.router,     prefix="/chat",     tags=["chat"])
-# app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+# Phase 2+: uncomment as you implement each router
+# from api.routers import agents, tasks, rag, projects, mcp

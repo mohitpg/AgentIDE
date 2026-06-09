@@ -13,7 +13,9 @@ dependencies = [
     "redis[hiredis]>=5.2",
     "python-jose[cryptography]>=3.3",   # JWT
     "passlib[bcrypt]>=1.7",             # password hashing
+    "langchain-core>=0.3",              # message types for the chat handler
     "agentide-schemas",
+    "agentide-orchestrator",
 ]
 
 [dependency-groups]
@@ -37,3 +39,4 @@ testpaths = ["tests"]
 
 [tool.uv.sources]
 agentide-schemas = { workspace = true }
+agentide-orchestrator = { workspace = true }

@@ -1,7 +1,13 @@
+import { useState } from 'react'
+
+import ChatPanel from './components/ChatPanel'
 import HealthBadge from './components/HealthBadge'
+import SessionList from './components/SessionList'
 import './App.css'
 
 function App(): JSX.Element {
+  const [activeId, setActiveId] = useState<string | null>(null)
+
   return (
     <div className="app">
       <header className="app-header">
@@ -16,23 +22,9 @@ function App(): JSX.Element {
         <HealthBadge />
       </header>
 
-      <main className="app-main">
-        <div className="welcome">
-          <h2>Phase 0 — Scaffolding complete</h2>
-          <ul className="checklist">
-            <li>✓ uv workspace + all Python packages</li>
-            <li>✓ FastAPI gateway with /health</li>
-            <li>✓ Postgres + pgvector · Redis · RabbitMQ</li>
-            <li>✓ Alembic migrations (users table)</li>
-            <li>✓ LangGraph orchestrator stub</li>
-            <li>✓ A2A agent stubs (code, summarizer, vision, rag, web, indexer)</li>
-            <li>✓ Celery workers (indexing, vision, web queues)</li>
-            <li>✓ Electron + React desktop ← you are here</li>
-          </ul>
-          <p className="next-step">
-            Next → <strong>Phase 1</strong>: single LangGraph agent, streaming chat
-          </p>
-        </div>
+      <main className="app-body">
+        <SessionList activeId={activeId} onSelect={(id) => setActiveId(id || null)} />
+        <ChatPanel sessionId={activeId} />
       </main>
     </div>
   )

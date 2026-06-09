@@ -30,9 +30,11 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # ── Database ─────────────────────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://agentide:agentide@localhost:5432/agentide"
+    database_url: str = "postgresql+asyncpg://agentide:agentide@localhost:5433/agentide"
     # Sync URL used by Alembic migrations only
-    database_url_sync: str = "postgresql+psycopg2://agentide:agentide@localhost:5432/agentide"
+    database_url_sync: str = "postgresql+psycopg2://agentide:agentide@localhost:5433/agentide"
+    # Driverless URL for the LangGraph Postgres checkpointer (psycopg3)
+    database_url_psycopg: str = "postgresql://agentide:agentide@localhost:5433/agentide"
 
     # ── Redis ────────────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
@@ -49,6 +51,10 @@ class Settings(BaseSettings):
     # ── LLM ──────────────────────────────────────────────────────────────────
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    openrouter_api_key: str = "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"
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    llm_max_tokens: int = 4096
+    llm_temperature: float = 0.7
 
     # ── Observability ─────────────────────────────────────────────────────────
     langchain_tracing_v2: bool = False
