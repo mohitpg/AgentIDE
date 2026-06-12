@@ -1,54 +1,106 @@
 """
-BaseAgent – abstract base every specialist agent inherits.
+BaseAgent — declarative base every specialist agent inherits.
 
-Subclasses implement `execute_skill` and declare their AgentCard.
-The A2A server (create_agent_app) wires HTTP routes automatically.
+A subclass declares identity (`id`, `name`, `description`) and a `skills_dir`
+containing SKILL.md files. The base:
+  - loads the skills (frontmatter → AgentSkill, body → system prompt),
+  - builds the A2A `AgentCard`,
+  - provides a default LLM-streaming `run()` that uses the skill's body as the
+    system prompt.
+
+Tool-using agents (e.g. Code with filesystem/git MCP in Phase 6) override `run`.
+The generic `LLMAgentExecutor` in `executor.py` adapts any BaseAgent to the A2A
+protocol, so agents never touch protocol plumbing.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any
+from pathlib import Path
 
-from schemas.a2a import AgentCard, Skill
+from a2a.types import AgentCapabilities, AgentCard
+from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
+
+from agent_common.config import get_agent_settings
+from agent_common.llm import LLMConfig, build_chat_model
+from agent_common.skills import SkillDefinition, load_skills
+
+
+def _text(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    out = ""
+    for block in content or []:  # type: ignore[union-attr]
+        if isinstance(block, dict) and block.get("type") == "text":
+            out += block.get("text", "")
+    return out
 
 
 class BaseAgent(ABC):
-    """Inherit this and implement `card` + `execute_skill`."""
+    # ── identity (override in subclass) ────────────────────────────────────────
+    id: str
+    name: str
+    description: str
+    version: str = "0.1.0"
 
+    def __init__(self, *, llm_config: LLMConfig | None = None, url: str | None = None) -> None:
+        self._llm_config = llm_config or LLMConfig.from_settings(get_agent_settings())
+        self._url = url or "http://localhost:8000"
+        self._skills: dict[str, SkillDefinition] = load_skills(self.skills_dir)
+
+    # ── skills ─────────────────────────────────────────────────────────────────
     @property
     @abstractmethod
+    def skills_dir(self) -> Path:
+        """Directory holding this agent's SKILL.md files."""
+        ...
+
+    @property
+    def skills(self) -> dict[str, SkillDefinition]:
+        return self._skills
+
+    def get_skill(self, skill_id: str) -> SkillDefinition | None:
+        return self._skills.get(skill_id)
+
+    def default_skill_id(self) -> str:
+        return next(iter(self._skills))
+
+    # ── A2A Agent Card ─────────────────────────────────────────────────────────
+    @property
     def card(self) -> AgentCard:
-        """Return this agent's A2A Agent Card (skills, URL, etc.)."""
-        ...
+        streaming = any(s.streaming for s in self._skills.values())
+        return AgentCard(
+            name=self.name,
+            description=self.description,
+            url=self._url,
+            version=self.version,
+            capabilities=AgentCapabilities(streaming=streaming),
+            default_input_modes=["text/plain"],
+            default_output_modes=["text/plain"],
+            skills=[s.to_agent_skill() for s in self._skills.values()],
+        )
 
-    @abstractmethod
-    async def execute_skill(
+    # ── execution (override for tool use) ──────────────────────────────────────
+    async def run(
         self,
         skill_id: str,
-        input_data: dict[str, Any],
-        run_id: str,
-    ) -> dict[str, Any]:
+        user_input: str,
+        *,
+        run_id: str = "",
+    ) -> AsyncIterator[str]:
         """
-        Execute a skill synchronously and return the result.
-        For streaming skills override `stream_skill` instead.
+        Stream the skill's response as text chunks. Default implementation runs
+        the LLM with the skill's Markdown body as the system prompt.
         """
-        ...
-
-    async def stream_skill(
-        self,
-        skill_id: str,
-        input_data: dict[str, Any],
-        run_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """
-        Execute a skill and yield streaming events.
-        Default: calls execute_skill and yields a single done event.
-        Override for real token streaming.
-        """
-        result = await self.execute_skill(skill_id, input_data, run_id)
-        yield {"type": "done", "data": result}
-
-    def get_skill(self, skill_id: str) -> Skill | None:
-        return next((s for s in self.card.skills if s.id == skill_id), None)
+        skill = self.get_skill(skill_id) or self._skills[self.default_skill_id()]
+        model = build_chat_model(self._llm_config, streaming=True)
+        messages = [
+            SystemMessage(content=skill.prompt),
+            HumanMessage(content=user_input),
+        ]
+        async for chunk in model.astream(messages):
+            if isinstance(chunk, AIMessageChunk):
+                piece = _text(chunk.content)
+                if piece:
+                    yield piece

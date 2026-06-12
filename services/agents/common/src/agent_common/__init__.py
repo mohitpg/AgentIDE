@@ -1,6 +1,23 @@
-"""agentide-agent-common: shared base for all A2A agent services."""
+"""agentide-agent-common: shared A2A server base (real a2a-sdk) for all agents."""
 
 from agent_common.base import BaseAgent
+from agent_common.client import A2AAgentClient
+from agent_common.config import AgentSettings, get_agent_settings
+from agent_common.executor import LLMAgentExecutor
+from agent_common.llm import LLMConfig, build_chat_model, system_message
 from agent_common.server import create_agent_app
+from agent_common.skills import SkillDefinition, load_skills
 
-__all__ = ["BaseAgent", "create_agent_app"]
+__all__ = [
+    "A2AAgentClient",
+    "AgentSettings",
+    "BaseAgent",
+    "LLMAgentExecutor",
+    "LLMConfig",
+    "SkillDefinition",
+    "build_chat_model",
+    "create_agent_app",
+    "get_agent_settings",
+    "load_skills",
+    "system_message",
+]

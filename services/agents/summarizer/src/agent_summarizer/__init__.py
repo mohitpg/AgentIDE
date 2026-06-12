@@ -1,4 +1,8 @@
 """
 Summarizer agent – skills: summarize-file, summarize-thread, tl;dr.
-Implemented in Phase 2.
+A2A service; see `agent_summarizer.agent.SummarizerAgent`.
 """
+
+from agent_summarizer.agent import SummarizerAgent
+
+__all__ = ["SummarizerAgent"]

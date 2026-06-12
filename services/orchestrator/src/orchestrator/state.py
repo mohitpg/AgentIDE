@@ -19,6 +19,10 @@ class GraphState(TypedDict):
     # Which specialist agent was last routed to
     active_agent: str | None
 
+    # The supervisor's routing decision for the current turn
+    # {"agent": str, "skill": str | None, "input": dict, "reason": str}
+    route_decision: dict[str, Any] | None
+
     # Retrieved RAG context (populated by RAG node)
     rag_context: list[dict[str, Any]]
 
