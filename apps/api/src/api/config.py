@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # ── Redis ────────────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
 
+    # ── Agent registry (Phase 2) ──────────────────────────────────────────────
+    # An agent is "live" if it has heartbeat within this window. Set to ~3x the
+    # agent heartbeat interval so a couple of missed beats don't drop it.
+    registry_ttl_seconds: int = 90
+    # How long the live-agent list is cached in Redis before re-reading Postgres.
+    registry_cache_ttl_seconds: int = 30
+
     # ── RabbitMQ ─────────────────────────────────────────────────────────────
     rabbitmq_url: str = "amqp://agentide:agentide@localhost:5672/"
 

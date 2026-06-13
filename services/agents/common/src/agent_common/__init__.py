@@ -5,6 +5,7 @@ from agent_common.client import A2AAgentClient
 from agent_common.config import AgentSettings, get_agent_settings
 from agent_common.executor import LLMAgentExecutor
 from agent_common.llm import LLMConfig, build_chat_model, system_message
+from agent_common.registration import RegistrationManager
 from agent_common.server import create_agent_app
 from agent_common.skills import SkillDefinition, load_skills
 
@@ -14,6 +15,7 @@ __all__ = [
     "BaseAgent",
     "LLMAgentExecutor",
     "LLMConfig",
+    "RegistrationManager",
     "SkillDefinition",
     "build_chat_model",
     "create_agent_app",

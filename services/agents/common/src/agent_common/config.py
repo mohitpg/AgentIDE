@@ -35,6 +35,14 @@ class AgentSettings(BaseSettings):
     # (dev default); set A2A_AUTH_TOKEN to require `Authorization: Bearer <token>`.
     a2a_auth_token: str = ""
 
+    # ── Agent registry (Phase 2) ──────────────────────────────────────────────
+    # On startup an agent registers its Agent Card with the gateway and heartbeats
+    # so the supervisor can discover it. Disabled by default so an agent run in
+    # isolation doesn't depend on the gateway; the stack enables it via env.
+    registry_enabled: bool = False
+    gateway_url: str = "http://localhost:8000"
+    registry_heartbeat_seconds: int = 30
+
 
 @lru_cache
 def get_agent_settings() -> AgentSettings:

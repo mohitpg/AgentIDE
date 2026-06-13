@@ -27,7 +27,7 @@ from orchestrator import LLMConfig, Orchestrator  # noqa: E402
 
 from api.config import get_settings  # noqa: E402
 from api.db.session import engine  # noqa: E402
-from api.routers import chat, health, sessions  # noqa: E402
+from api.routers import agents, chat, health, sessions  # noqa: E402
 
 settings = get_settings()
 
@@ -74,6 +74,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+app.include_router(agents.router, prefix="/agents", tags=["agents"])
 
 # Phase 2+: uncomment as you implement each router
-# from api.routers import agents, tasks, rag, projects, mcp
+# from api.routers import tasks, rag, projects, mcp
