@@ -1,55 +1,83 @@
 """
-Orchestrator runtime: owns the compiled graph + LangGraph Postgres checkpointer
-and exposes a single streaming entry point used by the API's WebSocket handler.
+Orchestrator runtime: owns the compiled **supervisor graph** + LangGraph Postgres
+checkpointer and exposes a single streaming entry point used by the API's
+WebSocket handler.
+
+Phase 2: the graph is the supervisor (`build_supervisor_graph`) — it routes each
+turn to a specialist A2A agent or answers inline. The supervisor's nodes emit the
+unified `StreamEvent`s directly via LangGraph's custom stream writer, so
+`stream_chat` simply forwards them; the API/UI render every agent's activity the
+same way.
+
+Discovery is dynamic: before each turn the directory (agent_id → A2A URL) is
+refreshed from the agent registry via an injected `directory_provider`, so the
+supervisor only delegates to agents that are currently registered and live. The
+A2A client itself lives in `agent_common`; the orchestrator constructs it at
+startup (lazily imported so the package stays importable without the agent stack).
 
 Lifecycle (driven by the API's FastAPI lifespan):
-    orch = Orchestrator(LLMConfig(...), checkpointer_conn_string=...)
-    await orch.startup()      # opens the pool, runs checkpointer .setup()
+    orch = Orchestrator(LLMConfig(...), conn, directory_provider=...)
+    await orch.startup()      # opens the pool, builds the supervisor graph
     ... orch.stream_chat(...) # per chat turn
     await orch.shutdown()
-
-Streaming contract: yields `StreamEvent`s from the shared schema so the API and
-UI handle orchestrator output the same way they will handle every other agent.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 
-from langchain_core.messages import AIMessageChunk, HumanMessage
-from schemas.events import AgentStepEvent, DoneEvent, TokenEvent
+from langchain_core.messages import HumanMessage
+from schemas.events import DoneEvent
 
-from orchestrator.graph import build_graph
+from orchestrator.directory import AgentDirectory
 from orchestrator.llm import LLMConfig, build_chat_model, system_message
+from orchestrator.supervisor import build_supervisor_graph
 
 logger = logging.getLogger(__name__)
 
-
-def _chunk_text(chunk: AIMessageChunk) -> str:
-    content = chunk.content
-    if isinstance(content, str):
-        return content
-    text = ""
-    for block in content:
-        if isinstance(block, dict) and block.get("type") == "text":
-            text += block.get("text", "")
-    return text
+# Returns the current {agent_id: A2A base URL} map (e.g. from the registry).
+DirectoryProvider = Callable[[], Awaitable[dict[str, str]]]
 
 
 class Orchestrator:
-    def __init__(self, llm_config: LLMConfig, checkpointer_conn_string: str) -> None:
+    def __init__(
+        self,
+        llm_config: LLMConfig,
+        checkpointer_conn_string: str,
+        *,
+        a2a_auth_token: str = "",
+        directory_provider: DirectoryProvider | None = None,
+    ) -> None:
         self._llm_config = llm_config
         self._conn_string = checkpointer_conn_string
+        self._auth_token = a2a_auth_token
+        self._directory_provider = directory_provider
+        # Shared, mutable directory the supervisor reads on every run; refreshed
+        # in place from the provider before each turn (the graph closes over it).
+        self._directory = AgentDirectory.from_env()
         self._pool = None  # type: ignore[var-annotated]
         self._graph = None  # type: ignore[var-annotated]
 
     async def startup(self) -> None:
-        model = build_chat_model(self._llm_config, streaming=True)
-        system = system_message(self._llm_config)
+        # Lazy import: keeps `orchestrator` importable (and unit-testable with an
+        # injected graph) without the full agent stack installed.
+        from agent_common.client import A2AAgentClient
+
+        router_model = build_chat_model(self._llm_config, streaming=False)
+        general_model = build_chat_model(self._llm_config, streaming=True)
+        general_system = system_message(self._llm_config)
+        client = A2AAgentClient(auth_token=self._auth_token)
         checkpointer = await self._build_checkpointer()
-        self._graph = build_graph(model, system, checkpointer=checkpointer)
+        self._graph = build_supervisor_graph(
+            router_model=router_model,
+            general_model=general_model,
+            general_system=general_system,
+            client=client,
+            directory=self._directory,
+            checkpointer=checkpointer,
+        )
 
     async def _build_checkpointer(self):
         """Postgres checkpointer with a connection pool; falls back to in-memory."""
@@ -87,6 +115,20 @@ class Orchestrator:
             await self._pool.close()
             self._pool = None
 
+    async def _refresh_directory(self) -> None:
+        """Pull the live agent set from the registry into the shared directory."""
+        if self._directory_provider is None:
+            return
+        try:
+            urls = await self._directory_provider()
+        except Exception as exc:  # registry blip — keep last-known agents
+            logger.warning(
+                "agent directory refresh failed (%s); using last-known agents", exc
+            )
+            return
+        self._directory.urls.clear()
+        self._directory.urls.update(urls)
+
     async def stream_chat(
         self,
         *,
@@ -96,13 +138,17 @@ class Orchestrator:
         user_id: str,
     ) -> AsyncIterator[object]:
         """
-        Run one chat turn. `session_id` is the checkpointer thread, so prior turns
-        are restored automatically — we only feed the new user message.
+        Run one chat turn through the supervisor. `session_id` is the checkpointer
+        thread, so prior turns are restored automatically — we only feed the new
+        user message.
 
-        Yields StreamEvents: agent_step(enter) → token* → agent_step(exit) → done.
+        Forwards the supervisor's StreamEvents (agent_step / token / done / error)
+        as they are emitted, stamping `duration_ms` onto the terminal `done`.
         """
         if self._graph is None:
             raise RuntimeError("Orchestrator.startup() was not called")
+
+        await self._refresh_directory()
 
         started = time.monotonic()
         config = {"configurable": {"thread_id": session_id}}
@@ -113,35 +159,11 @@ class Orchestrator:
             "user_id": user_id,
         }
 
-        yield AgentStepEvent(
-            run_id=run_id,
-            data={"agent": "assistant", "node": "agent", "phase": "enter"},
-        )
-
-        index = 0
-        total_tokens = 0
-        async for chunk, _meta in self._graph.astream(
-            graph_input, config, stream_mode="messages"
+        async for event in self._graph.astream(
+            graph_input, config, stream_mode="custom"
         ):
-            if not isinstance(chunk, AIMessageChunk):
-                continue
-            usage = getattr(chunk, "usage_metadata", None)
-            if usage:
-                total_tokens = usage.get("total_tokens", total_tokens)
-            text = _chunk_text(chunk)
-            if text:
-                yield TokenEvent(run_id=run_id, data={"content": text, "index": index})
-                index += 1
-
-        yield AgentStepEvent(
-            run_id=run_id,
-            data={"agent": "assistant", "node": "agent", "phase": "exit"},
-        )
-        yield DoneEvent(
-            run_id=run_id,
-            data={
-                "total_tokens": total_tokens,
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "agent": "assistant",
-            },
-        )
+            if isinstance(event, DoneEvent):
+                event.data.setdefault(
+                    "duration_ms", int((time.monotonic() - started) * 1000)
+                )
+            yield event

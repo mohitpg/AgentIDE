@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { useChat } from '../hooks/useChat'
+import type { UseChat } from '../hooks/useChat'
 
 interface Props {
   sessionId: string | null
+  chat: UseChat
 }
 
-export default function ChatPanel({ sessionId }: Props): JSX.Element {
-  const { messages, status, connected, send } = useChat(sessionId)
+export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
+  const { messages, status, connected, send } = chat
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 

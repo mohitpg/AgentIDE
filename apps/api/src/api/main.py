@@ -26,10 +26,24 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from orchestrator import LLMConfig, Orchestrator  # noqa: E402
 
 from api.config import get_settings  # noqa: E402
-from api.db.session import engine  # noqa: E402
+from api.db.redis import redis_client  # noqa: E402
+from api.db.session import AsyncSessionLocal, engine  # noqa: E402
 from api.routers import agents, chat, health, sessions  # noqa: E402
+from api.services.registry import AgentRegistry  # noqa: E402
 
 settings = get_settings()
+
+
+async def _agent_directory() -> dict[str, str]:
+    """Live {agent_id: A2A URL} from the registry — the supervisor's discovery."""
+    async with AsyncSessionLocal() as db:
+        registry = AgentRegistry(
+            db,
+            redis_client,
+            ttl_seconds=settings.registry_ttl_seconds,
+            cache_ttl_seconds=settings.registry_cache_ttl_seconds,
+        )
+        return await registry.url_map()
 
 
 @asynccontextmanager
@@ -43,6 +57,8 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
             temperature=settings.llm_temperature,
         ),
         checkpointer_conn_string=settings.database_url_psycopg,
+        a2a_auth_token=settings.a2a_auth_token,
+        directory_provider=_agent_directory,
     )
     await orchestrator.startup()
     app.state.orchestrator = orchestrator

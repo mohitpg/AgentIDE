@@ -44,6 +44,20 @@
   gap: 8px;
 }
 
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+}
+.sidebar-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+  font-weight: 600;
+}
+
 .new-chat {
   border: 1px solid #2a2a2a;
   background: #1b1b1b;
@@ -185,3 +199,272 @@
   cursor: pointer;
 }
 .composer button:disabled { background: #2a2a2a; color: #666; cursor: default; }
+
+/* ── Header right cluster + trace toggle ─────────────────────────────────── */
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panel-toggle {
+  border: 1px solid #2a2a2a;
+  background: #1b1b1b;
+  color: #888;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.panel-toggle:hover { background: #222; color: #ccc; }
+.panel-toggle.on { background: #232336; border-color: #3a3a5a; color: #c7c9ff; }
+
+/* In-panel collapse chevron (sidebar + trace headers) */
+.panel-collapse {
+  border: none;
+  background: none;
+  color: #666;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+.panel-collapse:hover { color: #ccc; background: #1f1f1f; }
+
+/* ── Agent trace panel ───────────────────────────────────────────────────── */
+.trace {
+  width: 340px;
+  flex-shrink: 0;
+  border-left: 1px solid #1f1f1f;
+  background: #121212;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.trace-header {
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #1f1f1f;
+}
+.trace-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+  font-weight: 600;
+}
+
+.trace-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.trace-empty {
+  color: #555;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  padding: 8px 4px;
+}
+
+/* ── Run card ─────────────────────────────────────────────────────────────── */
+.trace-run {
+  border: 1px solid #1f1f1f;
+  border-radius: 10px;
+  background: #161616;
+  overflow: hidden;
+}
+.trace-run.running { border-color: #2e2e4a; }
+.trace-run.error { border-color: #45292b; }
+
+.trace-run-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #1f1f1f;
+  background: #181818;
+}
+.trace-run-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #ccc;
+}
+.trace-run-status {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.trace-run-status.running { background: #1e2147; color: #8b91ff; }
+.trace-run-status.done { background: #11301c; color: #4ade80; }
+.trace-run-status.error { background: #3a1d1f; color: #f87171; }
+.trace-run-summary {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-run-pending {
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  color: #555;
+}
+.trace-run-error {
+  padding: 8px 14px 12px;
+  font-size: 0.75rem;
+  color: #f87171;
+}
+
+/* ── Steps ────────────────────────────────────────────────────────────────── */
+.trace-steps,
+.trace-tools {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trace-step {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.trace-step + .trace-step { border-top: 1px solid #1a1a1a; }
+
+.trace-rail {
+  width: 3px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+.trace-step.running .trace-rail { animation: trace-pulse 1.4s ease-in-out infinite; }
+
+.trace-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.trace-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trace-agent {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: lowercase;
+  border: 1px solid;
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+.trace-node {
+  font-size: 0.72rem;
+  color: #999;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.trace-skill {
+  font-size: 0.66rem;
+  color: #c7c9ff;
+  background: #1e2147;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.trace-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8b91ff;
+  margin-left: auto;
+  animation: trace-pulse 1.2s ease-in-out infinite;
+}
+
+.trace-decision {
+  font-size: 0.74rem;
+  color: #ddd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.trace-reason {
+  font-size: 0.72rem;
+  color: #777;
+  line-height: 1.45;
+}
+
+/* ── Tool calls ──────────────────────────────────────────────────────────── */
+.trace-tools {
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.trace-tool { border-left: 2px solid #2a2a2a; padding-left: 8px; }
+.trace-tool.running { border-color: #8b91ff; }
+.trace-tool.error { border-color: #f87171; }
+
+.trace-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: #bbb;
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-align: left;
+}
+.trace-tool-head:disabled { cursor: default; }
+.trace-tool-icon { font-size: 0.7rem; }
+.trace-tool-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.trace-chevron { margin-left: auto; color: #666; font-size: 0.65rem; }
+
+.trace-tool-detail {
+  padding: 4px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.trace-tool-detail > div { display: flex; flex-direction: column; gap: 2px; }
+.trace-kv-key {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #666;
+}
+.trace-tool-detail code {
+  font-size: 0.7rem;
+  color: #cfcfcf;
+  background: #0e0e0e;
+  border: 1px solid #1f1f1f;
+  border-radius: 5px;
+  padding: 5px 7px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.trace-error-text code { color: #f8a4a4; }
+
+@keyframes trace-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}

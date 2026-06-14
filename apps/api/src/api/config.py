@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     registry_ttl_seconds: int = 90
     # How long the live-agent list is cached in Redis before re-reading Postgres.
     registry_cache_ttl_seconds: int = 30
+    # Shared bearer the supervisor sends when delegating to agents; must match the
+    # agents' A2A_AUTH_TOKEN. Empty = no auth header (dev default).
+    a2a_auth_token: str = ""
 
     # ── RabbitMQ ─────────────────────────────────────────────────────────────
     rabbitmq_url: str = "amqp://agentide:agentide@localhost:5672/"
@@ -58,7 +61,7 @@ class Settings(BaseSettings):
     # ── LLM ──────────────────────────────────────────────────────────────────
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    openrouter_api_key: str = "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"
+    openrouter_api_key: str = "" # test key
     openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7

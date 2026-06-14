@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getSession, WS_URL } from '../lib/api'
+import { applyTraceEvent, type TraceRun } from '../lib/trace'
 import type { Message, StreamEvent } from '../types'
 
 type Status = 'idle' | 'streaming'
 
-interface UseChat {
+export interface UseChat {
   messages: Message[]
   status: Status
   connected: boolean
+  trace: TraceRun[]
   send: (content: string) => void
 }
 
@@ -20,12 +22,15 @@ export function useChat(sessionId: string | null): UseChat {
   const [messages, setMessages] = useState<Message[]>([])
   const [status, setStatus] = useState<Status>('idle')
   const [connected, setConnected] = useState(false)
+  // Live agent trace for this session's runs (not persisted — cleared on switch).
+  const [trace, setTrace] = useState<TraceRun[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const streamingIdRef = useRef<string | null>(null)
 
-  // Load history whenever the active session changes.
+  // Load history (and reset the trace) whenever the active session changes.
   useEffect(() => {
+    setTrace([])
     if (!sessionId) {
       setMessages([])
       return
@@ -71,6 +76,9 @@ export function useChat(sessionId: string | null): UseChat {
   }, [])
 
   const handleEvent = useCallback((event: StreamEvent): void => {
+    // Every event (except plain tokens) updates the agent trace.
+    setTrace((prev) => applyTraceEvent(prev, event))
+
     switch (event.type) {
       case 'token': {
         const chunk = String(event.data.content ?? '')
@@ -99,7 +107,7 @@ export function useChat(sessionId: string | null): UseChat {
         setStatus('idle')
         break
       }
-      // agent_step / tool_* are surfaced in the Phase 2 trace panel.
+      // agent_step / tool_* are surfaced in the Phase 2 trace panel (above).
       default:
         break
     }
@@ -126,5 +134,5 @@ export function useChat(sessionId: string | null): UseChat {
     [sessionId, status],
   )
 
-  return { messages, status, connected, send }
+  return { messages, status, connected, trace, send }
 }

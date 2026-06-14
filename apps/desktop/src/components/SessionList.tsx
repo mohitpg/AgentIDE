@@ -6,9 +6,10 @@ import type { Session } from '../types'
 interface Props {
   activeId: string | null
   onSelect: (id: string) => void
+  onCollapse?: () => void
 }
 
-export default function SessionList({ activeId, onSelect }: Props): JSX.Element {
+export default function SessionList({ activeId, onSelect, onCollapse }: Props): JSX.Element {
   const [sessions, setSessions] = useState<Session[]>([])
 
   const refresh = async (): Promise<void> => {
@@ -43,6 +44,19 @@ export default function SessionList({ activeId, onSelect }: Props): JSX.Element 
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-header">
+        <span className="sidebar-title">Chats</span>
+        {onCollapse && (
+          <button
+            className="panel-collapse"
+            title="Collapse chat history"
+            aria-label="Collapse chat history"
+            onClick={onCollapse}
+          >
+            ‹
+          </button>
+        )}
+      </div>
       <button className="new-chat" onClick={() => void handleNew()}>
         + New chat
       </button>

@@ -10,6 +10,7 @@ dependencies = [
     "langchain-core>=0.3",
     "psycopg[binary,pool]>=3.2",    # LangGraph Postgres checkpointer
     "agentide-schemas",
+    "agentide-agent-common",        # A2AAgentClient for delegating to agents
     "langchain-openrouter>=0.2.3",
 ]
 
@@ -33,3 +34,4 @@ testpaths = ["tests"]
 
 [tool.uv.sources]
 agentide-schemas = { workspace = true }
+agentide-agent-common = { workspace = true }
