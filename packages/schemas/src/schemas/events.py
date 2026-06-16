@@ -61,7 +61,19 @@ class ToolResultEvent(StreamEvent):
 
 
 class TaskProgressEvent(StreamEvent):
-    """data: {"task_id": str, "progress": int (0-100), "message": str}"""
+    """
+    Celery async-task lifecycle (Phase 3). One event type carries the whole
+    lifecycle; switch on ``data["status"]``.
+
+    data: {
+        "task_id": str,
+        "status": "pending"|"started"|"progress"|"success"|"failure"|"revoked",
+        "progress": int (0-100),
+        "message": str,
+        "result": Any | None,   # present on success
+        "error": str | None,    # present on failure
+    }
+    """
 
     type: EventType = EventType.TASK_PROGRESS
 

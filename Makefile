@@ -2,7 +2,7 @@
 
 .PHONY: help infra-up infra-down infra-logs infra-reset \
         install install-hooks migrate migrate-new migrate-down \
-        api-dev workers-dev desktop-dev \
+        api-dev workers-dev workers-dev-solo workers-beat desktop-dev \
         lint lint-fix typecheck test test-cov \
         clean
 
@@ -46,9 +46,20 @@ migrate-down: ## Downgrade one migration step
 api-dev: ## Run FastAPI dev server with hot-reload (port 8000)
 	cd apps/api && uv run uvicorn api.main:app --reload --port 8000
 
-workers-dev: ## Run Celery worker (all queues)
+workers-dev: ## Run Celery worker (all queues). Uses the threads pool — the default
+            ## prefork/billiard pool is broken on Windows (WinError 5/6).
 	cd services/workers && uv run celery -A workers.app:celery_app worker \
-	  --loglevel=info -Q default,indexing,vision,web
+	  --loglevel=info -Q default,indexing,vision,web \
+	  --pool=threads --concurrency=4
+
+workers-dev-solo: ## Run Celery worker with the solo pool (single task at a time; most
+                  ## reliable on Windows if the threads pool misbehaves)
+	cd services/workers && uv run celery -A workers.app:celery_app worker \
+	  --loglevel=info -Q default,indexing,vision,web \
+	  --pool=solo
+
+workers-beat: ## Run Celery Beat scheduler (registry health check, etc.)
+	cd services/workers && uv run celery -A workers.app:celery_app beat --loglevel=info
 
 desktop-dev: ## Run Electron + Vite dev (hot-reload)
 	cd apps/desktop && npm run dev

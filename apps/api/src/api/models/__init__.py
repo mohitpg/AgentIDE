@@ -6,6 +6,7 @@ Add new model imports as you create them.
 from api.models.agent import AgentRegistration
 from api.models.conversation import Conversation
 from api.models.message import Message
+from api.models.task import Task
 from api.models.user import User
 
-__all__ = ["AgentRegistration", "Conversation", "Message", "User"]
+__all__ = ["AgentRegistration", "Conversation", "Message", "Task", "User"]

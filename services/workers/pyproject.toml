@@ -11,6 +11,11 @@ dependencies = [
     "agentide-rag",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

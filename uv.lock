@@ -204,6 +204,7 @@ dependencies = [
     { name = "agentide-schemas" },
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "celery", extra = ["redis"] },
     { name = "fastapi" },
     { name = "langchain-core" },
     { name = "passlib", extra = ["bcrypt"] },
@@ -229,6 +230,7 @@ requires-dist = [
     { name = "agentide-schemas", editable = "packages/schemas" },
     { name = "alembic", specifier = ">=1.14" },
     { name = "asyncpg", specifier = ">=0.30" },
+    { name = "celery", extras = ["redis"], specifier = ">=5.4" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7" },
@@ -348,6 +350,11 @@ dependencies = [
     { name = "redis", extra = ["hiredis"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "agentide-rag", editable = "packages/rag" },
@@ -356,6 +363,9 @@ requires-dist = [
     { name = "kombu", specifier = ">=5.4" },
     { name = "redis", extras = ["hiredis"], specifier = ">=5.2" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.3" }]
 
 [[package]]
 name = "aiosqlite"

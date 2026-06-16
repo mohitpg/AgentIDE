@@ -12,6 +12,9 @@ Queues:
 
 Run with:
   celery -A workers.app:celery_app worker --loglevel=info -Q default,indexing,vision,web
+
+Scheduled jobs (Celery Beat) run alongside:
+  celery -A workers.app:celery_app beat --loglevel=info
 """
 
 from __future__ import annotations
@@ -29,6 +32,8 @@ celery_app = Celery(
     broker=RABBITMQ_URL,
     backend=REDIS_URL,
     include=[
+        "workers.tasks.mock",
+        "workers.tasks.maintenance",
         "workers.tasks.indexing",
         "workers.tasks.vision",
         "workers.tasks.web",
@@ -67,3 +72,14 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # fair dispatch for long tasks
     result_expires=3600,  # results live 1 h in Redis
 )
+
+# ── Scheduled jobs (Celery Beat) ──────────────────────────────────────────────
+# Placeholder maintenance job; later phases add re-index / cache-warmup here.
+celery_app.conf.beat_schedule = {
+    "registry-health-check": {
+        "task": "workers.tasks.maintenance.registry_health_check",
+        "schedule": 60.0,  # every 60 s
+        "options": {"queue": "default"},
+    },
+}
+

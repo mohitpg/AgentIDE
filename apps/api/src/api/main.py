@@ -28,8 +28,9 @@ from orchestrator import LLMConfig, Orchestrator  # noqa: E402
 from api.config import get_settings  # noqa: E402
 from api.db.redis import redis_client  # noqa: E402
 from api.db.session import AsyncSessionLocal, engine  # noqa: E402
-from api.routers import agents, chat, health, sessions  # noqa: E402
+from api.routers import agents, chat, health, sessions, tasks  # noqa: E402
 from api.services.registry import AgentRegistry  # noqa: E402
+from api.services.task_events import TaskEventHub  # noqa: E402
 
 settings = get_settings()
 
@@ -62,8 +63,15 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     )
     await orchestrator.startup()
     app.state.orchestrator = orchestrator
+
+    # Task-event hub: Redis pub/sub → persist task records + fan out to /tasks/ws.
+    task_hub = TaskEventHub(settings.redis_url)
+    await task_hub.start()
+    app.state.task_hub = task_hub
+
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────────
+    await task_hub.stop()
     await orchestrator.shutdown()
     await engine.dispose()
 
@@ -91,6 +99,7 @@ app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
+app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 
-# Phase 2+: uncomment as you implement each router
-# from api.routers import tasks, rag, projects, mcp
+# Phase 4+: uncomment as you implement each router
+# from api.routers import rag, projects, mcp
