@@ -48,6 +48,39 @@ export interface Task {
 
 export const TASK_TERMINAL: TaskStatus[] = ['success', 'failure', 'revoked']
 
+// ── RAG (Phase 4) ───────────────────────────────────────────────────────────
+export interface RagDocument {
+  id: string
+  filename: string
+  content_type: string | null
+  source: string
+  session_id: string | null
+  num_chunks: number
+  byte_size: number | null
+  created_at: string
+}
+
+export interface IngestResponse {
+  document_id: string
+  filename: string
+  num_chunks: number
+}
+
+export interface RagSearchHit {
+  chunk_id: string
+  document_id: string
+  filename: string
+  chunk_index: number
+  content: string
+  score: number
+  sources: string[]
+}
+
+export interface RagSearchResponse {
+  query: string
+  hits: RagSearchHit[]
+}
+
 // ── Streaming events (unified schema, switched on `type`) ───────────────────
 export type EventType =
   | 'token'

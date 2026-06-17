@@ -200,6 +200,31 @@
 }
 .composer button:disabled { background: #2a2a2a; color: #666; cursor: default; }
 
+/* Upload (paperclip) icon button — distinct from the purple Send button. */
+.composer-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  padding: 0;
+  height: 40px;
+  background: #1b1b1b !important;
+  color: #9ca3af !important;
+  border: 1px solid #2a2a2a !important;
+}
+.composer-upload:hover:not(:disabled) { color: #e5e5e5 !important; border-color: #6366f1 !important; }
+
+/* Transient indexing status above the composer. */
+.upload-status {
+  padding: 6px 24px;
+  font-size: 0.78rem;
+  border-top: 1px solid #1f1f1f;
+  background: #141414;
+}
+.upload-status.uploading { color: #9ca3af; }
+.upload-status.done { color: #4ade80; }
+.upload-status.error { color: #f87171; }
+
 /* ── Header right cluster + trace toggle ─────────────────────────────────── */
 .app-header-right {
   display: flex;

@@ -15,8 +15,10 @@ dependencies = [
     "python-jose[cryptography]>=3.3",   # JWT
     "passlib[bcrypt]>=1.7",             # password hashing
     "langchain-core>=0.3",              # message types for the chat handler
+    "python-multipart>=0.0.12",         # multipart/form-data for RAG file uploads
     "agentide-schemas",
     "agentide-orchestrator",
+    "agentide-rag",
 ]
 
 [dependency-groups]
@@ -42,3 +44,4 @@ testpaths = ["tests"]
 [tool.uv.sources]
 agentide-schemas = { workspace = true }
 agentide-orchestrator = { workspace = true }
+agentide-rag = { workspace = true }

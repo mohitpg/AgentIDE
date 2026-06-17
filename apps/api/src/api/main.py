@@ -28,7 +28,7 @@ from orchestrator import LLMConfig, Orchestrator  # noqa: E402
 from api.config import get_settings  # noqa: E402
 from api.db.redis import redis_client  # noqa: E402
 from api.db.session import AsyncSessionLocal, engine  # noqa: E402
-from api.routers import agents, chat, health, sessions, tasks  # noqa: E402
+from api.routers import agents, chat, health, rag, sessions, tasks  # noqa: E402
 from api.services.registry import AgentRegistry  # noqa: E402
 from api.services.task_events import TaskEventHub  # noqa: E402
 
@@ -100,6 +100,7 @@ app.include_router(chat.router, prefix="/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+app.include_router(rag.router, prefix="/rag", tags=["rag"])
 
 # Phase 4+: uncomment as you implement each router
-# from api.routers import rag, projects, mcp
+# from api.routers import projects, mcp

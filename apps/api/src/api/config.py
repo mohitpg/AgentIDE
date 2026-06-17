@@ -66,6 +66,18 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7
 
+    # ── RAG (Phase 4) ─────────────────────────────────────────────────────────
+    # Embedding model + dimension. `rag_embedding_dim` MUST match the vector(N)
+    # column created in migration 0005; changing the model means a new migration.
+    rag_embedding_model: str = "BAAI/bge-small-en-v1.5"
+    rag_embedding_dim: int = 384
+    rag_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rag_chunk_tokens: int = 512
+    rag_chunk_overlap: int = 64
+    rag_candidate_k: int = 20  # candidates pulled from each retriever pre-rerank
+    rag_top_k: int = 5  # chunks returned after reranking
+    rag_max_upload_bytes: int = 10_000_000  # 10 MB upload cap
+
     # ── Observability ─────────────────────────────────────────────────────────
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""

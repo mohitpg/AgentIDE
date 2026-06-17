@@ -8,7 +8,16 @@ dependencies = [
     "asyncpg>=0.30",
     "pgvector>=0.3",
     "tiktoken>=0.8",
+    "fastembed>=0.4",            # local ONNX embeddings (BGE-small)
+    "sentence-transformers>=3.0", # cross-encoder reranker
+    "pypdf>=5.0",                # PDF text extraction
     "agentide-schemas",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
 ]
 
 [build-system]
