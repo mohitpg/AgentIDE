@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 _DEFAULTS = {
     "summarizer": "http://localhost:8101",
     "code": "http://localhost:8102",
+    "rag": "http://localhost:8103",
 }
 
 

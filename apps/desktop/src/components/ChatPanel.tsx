@@ -1,20 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { UseChat } from '../hooks/useChat'
-import { uploadDocument } from '../lib/api'
+import { getTask, uploadDocumentAsync } from '../lib/api'
+import type { Task } from '../types'
+import { TASK_TERMINAL } from '../types'
+import MessageContent from './MessageContent'
 
 interface Props {
   sessionId: string | null
   chat: UseChat
+  // Called when an upload finishes indexing, so the Sources panel can refresh.
+  onIndexed?: () => void
+  // Called when a citation in an answer is clicked (filename of the source).
+  onOpenSource?: (filename: string) => void
 }
 
 type UploadState =
   | { kind: 'idle' }
-  | { kind: 'uploading'; filename: string }
+  | { kind: 'indexing'; filename: string; progress: number; message: string }
   | { kind: 'done'; filename: string; chunks: number }
   | { kind: 'error'; message: string }
 
-export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
+// Poll a task to completion, reporting each tick. The first index also downloads
+// the embedding model, so allow a generous timeout.
+async function pollTask(id: string, onTick: (t: Task) => void): Promise<Task> {
+  const deadline = Date.now() + 300_000
+  for (;;) {
+    const task = await getTask(id)
+    onTick(task)
+    if (TASK_TERMINAL.includes(task.status)) return task
+    if (Date.now() > deadline) throw new Error('Indexing timed out')
+    await new Promise((r) => setTimeout(r, 1200))
+  }
+}
+
+export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: Props): JSX.Element {
   const { messages, status, connected, send } = chat
   const [input, setInput] = useState('')
   const [upload, setUpload] = useState<UploadState>({ kind: 'idle' })
@@ -43,10 +63,24 @@ export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-selecting the same file
     if (!file) return
-    setUpload({ kind: 'uploading', filename: file.name })
+    setUpload({ kind: 'indexing', filename: file.name, progress: 0, message: 'Queued' })
     try {
-      const res = await uploadDocument(file, sessionId)
-      setUpload({ kind: 'done', filename: res.filename, chunks: res.num_chunks })
+      const task = await uploadDocumentAsync(file, sessionId)
+      const final = await pollTask(task.id, (t) =>
+        setUpload({
+          kind: 'indexing',
+          filename: file.name,
+          progress: t.progress,
+          message: t.message ?? t.status,
+        }),
+      )
+      if (final.status === 'success') {
+        const chunks = Number(final.result?.num_chunks ?? 0)
+        setUpload({ kind: 'done', filename: file.name, chunks })
+        onIndexed?.()
+      } else {
+        setUpload({ kind: 'error', message: final.error ?? `Indexing ${final.status}` })
+      }
     } catch (err) {
       setUpload({ kind: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
     }
@@ -60,7 +94,7 @@ export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
     )
   }
 
-  const uploading = upload.kind === 'uploading'
+  const uploading = upload.kind === 'indexing'
 
   return (
     <section className="chat">
@@ -69,7 +103,11 @@ export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
           <div key={m.id} className={`message ${m.role}`}>
             <div className="message-role">{m.role}</div>
             <div className="message-content">
-              {m.content || (status === 'streaming' && m.role === 'assistant' ? '▍' : '')}
+              <MessageContent
+                message={m}
+                streaming={status === 'streaming'}
+                onOpenSource={onOpenSource}
+              />
             </div>
           </div>
         ))}
@@ -77,7 +115,11 @@ export default function ChatPanel({ sessionId, chat }: Props): JSX.Element {
 
       {upload.kind !== 'idle' && (
         <div className={`upload-status ${upload.kind}`}>
-          {upload.kind === 'uploading' && <span>Indexing {upload.filename}…</span>}
+          {upload.kind === 'indexing' && (
+            <span>
+              Indexing {upload.filename}… {upload.progress}% · {upload.message}
+            </span>
+          )}
           {upload.kind === 'done' && (
             <span>✓ Indexed {upload.filename} — {upload.chunks} chunk{upload.chunks === 1 ? '' : 's'}</span>
           )}

@@ -1,23 +1,31 @@
 """
 /rag — document ingestion + hybrid retrieval (Phase 4).
 
-  POST   /rag/documents          upload a file → chunk → embed → store in pgvector
+  POST   /rag/documents          upload → chunk → embed → store (synchronous)
+  POST   /rag/documents/async     upload → enqueue Celery indexer → return a Task
   GET    /rag/documents          list indexed documents (newest first)
   DELETE /rag/documents/{id}     delete a document and its chunks
   POST   /rag/search             hybrid search (HNSW vector + full-text/BM25)
                                  → cross-encoder rerank → top-k chunks
 
-Ingestion is synchronous in this base pass so an upload is immediately
-searchable; the same `RagPipeline` is reusable from the Celery indexer for
-large/async corpora later. The heavy embedder/reranker models load lazily on
-first use and are cached process-wide by `packages/rag`.
+Two ingestion paths share the same `RagPipeline`: the synchronous endpoint
+indexes inline (immediately searchable, simplest), while `/documents/async`
+stages the file and hands indexing to the `indexing` Celery queue so large
+documents don't block the request — progress streams over `/tasks/ws` and the
+final result (document_id, num_chunks) lands on the Task record. The heavy
+embedder/reranker models load lazily on first use and are cached process-wide.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import re
+import tempfile
 import uuid
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -31,8 +39,9 @@ from fastapi import (
 from rag import RagConfig, RagPipeline, UnsupportedDocumentError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import get_settings
+from api.config import Settings, get_settings
 from api.db.session import get_db
+from api.models.task import Task
 from api.schemas.rag import (
     IngestResponse,
     RagDocumentRead,
@@ -40,9 +49,36 @@ from api.schemas.rag import (
     RagSearchRequest,
     RagSearchResponse,
 )
+from api.schemas.tasks import TaskRead
+from api.services.celery_client import enqueue
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _upload_dir(settings: Settings) -> Path:
+    """Where uploaded bytes are staged for the Celery indexer to read."""
+    base = (
+        Path(settings.rag_upload_dir)
+        if settings.rag_upload_dir
+        else Path(tempfile.gettempdir()) / "agentide_uploads"
+    )
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _safe_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120] or "document"
+
+
+def _validate_upload(data: bytes, settings: Settings) -> None:
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
+    if len(data) > settings.rag_max_upload_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File exceeds {settings.rag_max_upload_bytes} byte limit",
+        )
 
 
 @lru_cache
@@ -74,14 +110,7 @@ async def upload_document(
     pipeline: RagPipeline = Depends(get_pipeline),
 ) -> IngestResponse:
     data = await file.read()
-    settings = get_settings()
-    if not data:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
-    if len(data) > settings.rag_max_upload_bytes:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            f"File exceeds {settings.rag_max_upload_bytes} byte limit",
-        )
+    _validate_upload(data, get_settings())
 
     try:
         result = await pipeline.ingest(
@@ -101,6 +130,77 @@ async def upload_document(
         filename=result.filename,
         num_chunks=result.num_chunks,
     )
+
+
+@router.post(
+    "/documents/async", response_model=TaskRead, status_code=status.HTTP_202_ACCEPTED
+)
+async def upload_document_async(
+    file: UploadFile = File(...),
+    session_id: uuid.UUID | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> Task:
+    """
+    Stage the upload and hand indexing to the Celery `indexing` queue.
+
+    Returns the `tasks` row immediately (202); progress + the final result
+    (document_id, num_chunks) stream over `/tasks/ws` and persist on the row,
+    so large documents never block the request. Same `RagPipeline` runs in the
+    worker as in the synchronous endpoint.
+    """
+    settings = get_settings()
+    data = await file.read()
+    _validate_upload(data, settings)
+
+    filename = file.filename or "document"
+    task = Task(
+        type="index_document",
+        label=f"Index {filename}",
+        queue="indexing",
+        status="pending",
+        params={
+            "filename": filename,
+            "content_type": file.content_type,
+            "byte_size": len(data),
+        },
+        session_id=session_id,
+    )
+    db.add(task)
+    # Commit before dispatch so the worker's first progress event finds the row.
+    await db.commit()
+    await db.refresh(task)
+
+    # Stage the bytes where the worker can read them, keyed by the task id.
+    path = _upload_dir(settings) / f"{task.id}__{_safe_name(filename)}"
+    path.write_bytes(data)
+
+    kwargs = {
+        "document_path": str(path),
+        "filename": filename,
+        "content_type": file.content_type,
+        "session_id": str(session_id) if session_id else None,
+    }
+    try:
+        await asyncio.to_thread(
+            enqueue,
+            "workers.tasks.indexing.index_document",
+            task_id=str(task.id),
+            queue="indexing",
+            kwargs=kwargs,
+        )
+    except Exception as exc:  # broker down — reflect the dispatch failure on the row
+        logger.exception("failed to enqueue index_document task %s", task.id)
+        task.status = "failure"
+        task.error = f"dispatch failed: {exc}"
+        await db.commit()
+        await db.refresh(task)
+        with contextlib.suppress(OSError):
+            path.unlink()
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Failed to enqueue indexing task"
+        ) from exc
+
+    return task
 
 
 @router.get("/documents", response_model=list[RagDocumentRead])

@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     rag_candidate_k: int = 20  # candidates pulled from each retriever pre-rerank
     rag_top_k: int = 5  # chunks returned after reranking
     rag_max_upload_bytes: int = 10_000_000  # 10 MB upload cap
+    # Where the gateway stages uploaded files for the Celery indexer to read.
+    # Empty → <system temp>/agentide_uploads (API + worker share the host).
+    rag_upload_dir: str = ""
 
     # ── Observability ─────────────────────────────────────────────────────────
     langchain_tracing_v2: bool = False

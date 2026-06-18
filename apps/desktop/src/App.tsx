@@ -1,11 +1,13 @@
 import { useState } from 'react'
 
 import ChatPanel from './components/ChatPanel'
+import DocsPanel from './components/DocsPanel'
 import HealthBadge from './components/HealthBadge'
 import SessionList from './components/SessionList'
 import TasksPanel from './components/TasksPanel'
 import TracePanel from './components/TracePanel'
 import { useChat } from './hooks/useChat'
+import { useDocuments } from './hooks/useDocuments'
 import { useTasks } from './hooks/useTasks'
 import './App.css'
 
@@ -14,10 +16,20 @@ function App(): JSX.Element {
   const [showHistory, setShowHistory] = useState(true)
   const [showTrace, setShowTrace] = useState(true)
   const [showTasks, setShowTasks] = useState(false)
+  const [showDocs, setShowDocs] = useState(false)
+  // Filename of the source a citation points at; opens + highlights the Sources panel.
+  const [highlightDoc, setHighlightDoc] = useState<string | null>(null)
   // One WebSocket for the session, shared by the chat and the trace panel.
   const chat = useChat(activeId)
   // Separate WebSocket for async task progress (runs independently of chat).
   const tasks = useTasks()
+  // Indexed-document list backing the Sources panel.
+  const documents = useDocuments()
+
+  const openSource = (filename: string): void => {
+    setHighlightDoc(filename)
+    setShowDocs(true)
+  }
 
   return (
     <div className="app">
@@ -55,6 +67,14 @@ function App(): JSX.Element {
           >
             Tasks
           </button>
+          <button
+            className={`panel-toggle ${showDocs ? 'on' : ''}`}
+            onClick={() => setShowDocs((v) => !v)}
+            title="Toggle indexed sources panel"
+            aria-pressed={showDocs}
+          >
+            Sources
+          </button>
           <HealthBadge />
         </div>
       </header>
@@ -67,9 +87,21 @@ function App(): JSX.Element {
             onCollapse={() => setShowHistory(false)}
           />
         )}
-        <ChatPanel sessionId={activeId} chat={chat} />
+        <ChatPanel
+          sessionId={activeId}
+          chat={chat}
+          onIndexed={documents.refresh}
+          onOpenSource={openSource}
+        />
         {showTrace && <TracePanel trace={chat.trace} onCollapse={() => setShowTrace(false)} />}
         {showTasks && <TasksPanel tasks={tasks} onCollapse={() => setShowTasks(false)} />}
+        {showDocs && (
+          <DocsPanel
+            documents={documents}
+            highlight={highlightDoc}
+            onCollapse={() => setShowDocs(false)}
+          />
+        )}
       </main>
     </div>
   )

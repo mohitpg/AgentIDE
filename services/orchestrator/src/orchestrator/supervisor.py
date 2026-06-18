@@ -58,6 +58,10 @@ ROUTER_PROMPT = (
     "explain (explain a snippet)\n"
     "- summarizer: summarize-file (condense file contents), summarize-thread "
     "(condense a conversation), tl;dr (gist of arbitrary text)\n"
+    "- rag: answer (answer a question using the indexed documents / knowledge "
+    "base, with citations), retrieve (return the relevant source passages). Use "
+    "rag when the user asks about uploaded/indexed documents, the docs, or the "
+    "knowledge base.\n"
     "- general: for anything conversational that needs no specialist\n\n"
     'Respond with ONLY a JSON object: {"agent": "...", "skill": "...", '
     '"reason": "..."}. Use "general" with "skill": null when no specialist fits.'
@@ -67,6 +71,7 @@ ROUTER_PROMPT = (
 _VALID = {
     "code": {"generate", "edit", "explain"},
     "summarizer": {"summarize-file", "summarize-thread", "tl;dr"},
+    "rag": {"answer", "retrieve"},
 }
 
 

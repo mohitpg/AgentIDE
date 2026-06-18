@@ -68,6 +68,10 @@ export async function cancelTask(id: string): Promise<void> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
+export async function getTask(id: string): Promise<Task> {
+  return json(await fetch(`${API_BASE}/tasks/${id}`))
+}
+
 // ── RAG (Phase 4) ─────────────────────────────────────────────────────────────
 export async function uploadDocument(
   file: File,
@@ -85,8 +89,30 @@ export async function uploadDocument(
   return res.json() as Promise<IngestResponse>
 }
 
+// Async ingestion: returns a Task immediately; index runs on the Celery worker
+// and progress streams over /tasks/ws (or poll GET /tasks/{id}).
+export async function uploadDocumentAsync(
+  file: File,
+  sessionId?: string | null,
+): Promise<Task> {
+  const form = new FormData()
+  form.append('file', file)
+  if (sessionId) form.append('session_id', sessionId)
+  const res = await fetch(`${API_BASE}/rag/documents/async`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<Task>
+}
+
 export async function listDocuments(): Promise<RagDocument[]> {
   return json(await fetch(`${API_BASE}/rag/documents`))
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/rag/documents/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
 export async function searchRag(query: string, topK?: number): Promise<RagSearchResponse> {

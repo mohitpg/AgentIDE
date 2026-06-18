@@ -3,6 +3,7 @@
 .PHONY: help infra-up infra-down infra-logs infra-reset \
         install install-hooks migrate migrate-new migrate-down \
         api-dev workers-dev workers-dev-solo workers-beat desktop-dev \
+        rag-agent-dev \
         lint lint-fix typecheck test test-cov \
         clean
 
@@ -63,6 +64,9 @@ workers-beat: ## Run Celery Beat scheduler (registry health check, etc.)
 
 desktop-dev: ## Run Electron + Vite dev (hot-reload)
 	cd apps/desktop && npm run dev
+
+rag-agent-dev: ## Run the RAG A2A agent (port 8103). Self-registers so the supervisor can route to it.
+	cd services/agents/rag && uv run python -m agent_rag
 
 # ── Quality ────────────────────────────────────────────────────────────────────
 lint: ## Run ruff check + format-check + eslint
