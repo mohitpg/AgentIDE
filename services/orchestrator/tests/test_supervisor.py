@@ -65,6 +65,12 @@ def test_parse_decision_falls_back_to_general_on_garbage():
     assert _parse_decision("not json at all")["agent"] == "general"
 
 
+def test_parse_decision_snaps_invalid_vision_skill():
+    d = _parse_decision('{"agent": "vision", "skill": "bogus"}')
+    assert d["agent"] == "vision"
+    assert d["skill"] in {"analyze-image", "ocr", "diagram-to-code"}
+
+
 # ── routing through the graph ─────────────────────────────────────────────────
 
 
@@ -108,6 +114,28 @@ async def test_routes_to_summarizer_with_text_payload():
     assert result["active_agent"] == "summarizer"
     assert client.calls[0][1] == "tl;dr"
     assert client.calls[0][2] == {"text": "tldr this please"}
+
+
+@pytest.mark.asyncio
+async def test_routes_to_vision_agent_for_image():
+    client = FakeA2AClient("a red square", result={"output": "a red square"})
+    graph = build_supervisor_graph(
+        router_model=_router('{"agent": "vision", "skill": "analyze-image", "reason": "image"}'),
+        general_model=_general("unused"),
+        general_system=SystemMessage(content="sys"),
+        client=client,
+        directory=AgentDirectory(),
+        checkpointer=MemorySaver(),
+    )
+
+    result = await graph.ainvoke(
+        _state("what is this? data:image/png;base64,AAAA"), {"configurable": {"thread_id": "t"}}
+    )
+
+    assert result["active_agent"] == "vision"
+    # the vision agent was called on its directory URL with the analyze-image skill
+    assert client.calls[0][0] == "http://localhost:8104"
+    assert client.calls[0][1] == "analyze-image"
 
 
 @pytest.mark.asyncio

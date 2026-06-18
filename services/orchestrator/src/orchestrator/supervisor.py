@@ -62,6 +62,10 @@ ROUTER_PROMPT = (
     "base, with citations), retrieve (return the relevant source passages). Use "
     "rag when the user asks about uploaded/indexed documents, the docs, or the "
     "knowledge base.\n"
+    "- vision: analyze-image (describe/analyse an image), ocr (extract text from "
+    "an image), diagram-to-code (turn a diagram/mockup/screenshot into code). Use "
+    "vision whenever the message includes an image (a data URI, an image URL, or a "
+    "local image path) or asks about a screenshot/diagram/photo.\n"
     "- general: for anything conversational that needs no specialist\n\n"
     'Respond with ONLY a JSON object: {"agent": "...", "skill": "...", '
     '"reason": "..."}. Use "general" with "skill": null when no specialist fits.'
@@ -72,6 +76,7 @@ _VALID = {
     "code": {"generate", "edit", "explain"},
     "summarizer": {"summarize-file", "summarize-thread", "tl;dr"},
     "rag": {"answer", "retrieve"},
+    "vision": {"analyze-image", "ocr", "diagram-to-code"},
 }
 
 

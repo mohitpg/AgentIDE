@@ -16,6 +16,7 @@ _DEFAULTS = {
     "summarizer": "http://localhost:8101",
     "code": "http://localhost:8102",
     "rag": "http://localhost:8103",
+    "vision": "http://localhost:8104",
 }
 
 

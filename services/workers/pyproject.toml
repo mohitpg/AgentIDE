@@ -9,6 +9,7 @@ dependencies = [
     "redis[hiredis]>=5.2",
     "agentide-schemas",
     "agentide-rag",
+    "agentide-agent-vision",  # reused by the vision queue task (Phase 5)
 ]
 
 [dependency-groups]
@@ -26,3 +27,4 @@ packages = ["src/workers"]
 [tool.uv.sources]
 agentide-schemas = { workspace = true }
 agentide-rag = { workspace = true }
+agentide-agent-vision = { workspace = true }

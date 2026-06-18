@@ -3,7 +3,7 @@
 .PHONY: help infra-up infra-down infra-logs infra-reset \
         install install-hooks migrate migrate-new migrate-down \
         api-dev workers-dev workers-dev-solo workers-beat desktop-dev \
-        rag-agent-dev \
+        rag-agent-dev vision-agent-dev \
         lint lint-fix typecheck test test-cov \
         clean
 
@@ -67,6 +67,9 @@ desktop-dev: ## Run Electron + Vite dev (hot-reload)
 
 rag-agent-dev: ## Run the RAG A2A agent (port 8103). Self-registers so the supervisor can route to it.
 	cd services/agents/rag && uv run python -m agent_rag
+
+vision-agent-dev: ## Run the Vision A2A agent (port 8104). Self-registers so the supervisor can route to it.
+	cd services/agents/vision && uv run python -m agent_vision
 
 # ── Quality ────────────────────────────────────────────────────────────────────
 lint: ## Run ruff check + format-check + eslint
