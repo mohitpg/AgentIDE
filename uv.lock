@@ -225,6 +225,7 @@ name = "agentide-api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
+    { name = "agentide-mcp" },
     { name = "agentide-orchestrator" },
     { name = "agentide-rag" },
     { name = "agentide-schemas" },
@@ -253,6 +254,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agentide-mcp", editable = "packages/mcp" },
     { name = "agentide-orchestrator", editable = "services/orchestrator" },
     { name = "agentide-rag", editable = "packages/rag" },
     { name = "agentide-schemas", editable = "packages/schemas" },
@@ -286,12 +288,26 @@ source = { editable = "packages/mcp" }
 dependencies = [
     { name = "agentide-schemas" },
     { name = "mcp" },
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "agentide-schemas", editable = "packages/schemas" },
     { name = "mcp", specifier = ">=1.0" },
+    { name = "pydantic", specifier = ">=2.5" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
 ]
 
 [[package]]

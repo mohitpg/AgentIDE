@@ -66,6 +66,16 @@ class BaseAgent(ABC):
     def default_skill_id(self) -> str:
         return next(iter(self._skills))
 
+    # ── lifecycle (override for tool/resource setup) ───────────────────────────
+    async def astartup(self) -> None:
+        """Called once when the A2A app starts. Default: nothing.
+
+        Tool-using agents override this to connect their MCP servers (Phase 6).
+        """
+
+    async def ashutdown(self) -> None:
+        """Called once when the A2A app stops. Mirror of `astartup`."""
+
     # ── A2A Agent Card ─────────────────────────────────────────────────────────
     @property
     def card(self) -> AgentCard:

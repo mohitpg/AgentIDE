@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openrouter_api_key: str = "" # test key
-    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    openrouter_model: str = "poolside/laguna-xs.2:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7
 
@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # Where the gateway stages uploaded files for the Celery indexer to read.
     # Empty → <system temp>/agentide_uploads (API + worker share the host).
     rag_upload_dir: str = ""
+
+    # ── MCP (Phase 6) ─────────────────────────────────────────────────────────
+    # Default sandbox root used by the built-in filesystem/git server templates
+    # offered at GET /mcp/builtins. Empty → the API process's working directory.
+    mcp_workspace_dir: str = ""
 
     # ── Observability ─────────────────────────────────────────────────────────
     langchain_tracing_v2: bool = False

@@ -10,9 +10,10 @@ speaks the A2A protocol:
 Skill execution is handled by `LLMAgentExecutor`; tasks are tracked in an
 in-memory store (swap for a Postgres-backed store in Phase 7).
 
-When `registry_enabled` is set, the app also self-registers with the gateway's
-agent registry on startup and deregisters on shutdown (Phase 2), via a Starlette
-lifespan attached to the built app.
+The app's Starlette lifespan always runs the agent's `astartup`/`ashutdown`
+hooks (Phase 6: tool-using agents connect their MCP servers there). When
+`registry_enabled` is set it additionally self-registers with the gateway's
+agent registry on startup and deregisters on shutdown (Phase 2).
 """
 
 from __future__ import annotations
@@ -31,21 +32,29 @@ from agent_common.executor import LLMAgentExecutor
 from agent_common.registration import RegistrationManager
 
 
-def _registration_lifespan(agent: BaseAgent, settings: AgentSettings):
+def _agent_lifespan(agent: BaseAgent, settings: AgentSettings):
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        manager = RegistrationManager(
-            agent_id=agent.id,
-            card=agent.card.model_dump(mode="json", by_alias=True, exclude_none=True),
-            gateway_url=settings.gateway_url,
-            heartbeat_seconds=settings.registry_heartbeat_seconds,
-            auth_token=settings.a2a_auth_token,
-        )
-        await manager.start()
+        # Agent setup first (e.g. connect MCP servers) so the agent can serve
+        # tool-backed requests as soon as it's registered.
+        await agent.astartup()
+
+        manager: RegistrationManager | None = None
+        if settings.registry_enabled:
+            manager = RegistrationManager(
+                agent_id=agent.id,
+                card=agent.card.model_dump(mode="json", by_alias=True, exclude_none=True),
+                gateway_url=settings.gateway_url,
+                heartbeat_seconds=settings.registry_heartbeat_seconds,
+                auth_token=settings.a2a_auth_token,
+            )
+            await manager.start()
         try:
             yield
         finally:
-            await manager.stop()
+            if manager is not None:
+                await manager.stop()
+            await agent.ashutdown()
 
     return lifespan
 
@@ -59,8 +68,4 @@ def create_agent_app(
         task_store=InMemoryTaskStore(),
     )
     app_builder = A2AStarletteApplication(agent_card=agent.card, http_handler=handler)
-
-    lifespan = (
-        _registration_lifespan(agent, settings) if settings.registry_enabled else None
-    )
-    return app_builder.build(lifespan=lifespan)
+    return app_builder.build(lifespan=_agent_lifespan(agent, settings))

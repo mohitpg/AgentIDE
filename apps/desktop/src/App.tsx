@@ -3,11 +3,13 @@ import { useState } from 'react'
 import ChatPanel from './components/ChatPanel'
 import DocsPanel from './components/DocsPanel'
 import HealthBadge from './components/HealthBadge'
+import McpPanel from './components/McpPanel'
 import SessionList from './components/SessionList'
 import TasksPanel from './components/TasksPanel'
 import TracePanel from './components/TracePanel'
 import { useChat } from './hooks/useChat'
 import { useDocuments } from './hooks/useDocuments'
+import { useMcp } from './hooks/useMcp'
 import { useTasks } from './hooks/useTasks'
 import './App.css'
 
@@ -17,6 +19,7 @@ function App(): JSX.Element {
   const [showTrace, setShowTrace] = useState(true)
   const [showTasks, setShowTasks] = useState(false)
   const [showDocs, setShowDocs] = useState(false)
+  const [showMcp, setShowMcp] = useState(false)
   // Filename of the source a citation points at; opens + highlights the Sources panel.
   const [highlightDoc, setHighlightDoc] = useState<string | null>(null)
   // One WebSocket for the session, shared by the chat and the trace panel.
@@ -25,6 +28,8 @@ function App(): JSX.Element {
   const tasks = useTasks()
   // Indexed-document list backing the Sources panel.
   const documents = useDocuments()
+  // Registered MCP servers backing the MCP settings panel.
+  const mcp = useMcp()
 
   const openSource = (filename: string): void => {
     setHighlightDoc(filename)
@@ -75,6 +80,14 @@ function App(): JSX.Element {
           >
             Sources
           </button>
+          <button
+            className={`panel-toggle ${showMcp ? 'on' : ''}`}
+            onClick={() => setShowMcp((v) => !v)}
+            title="Toggle MCP servers panel"
+            aria-pressed={showMcp}
+          >
+            MCP
+          </button>
           <HealthBadge />
         </div>
       </header>
@@ -102,6 +115,7 @@ function App(): JSX.Element {
             onCollapse={() => setShowDocs(false)}
           />
         )}
+        {showMcp && <McpPanel mcp={mcp} onCollapse={() => setShowMcp(false)} />}
       </main>
     </div>
   )

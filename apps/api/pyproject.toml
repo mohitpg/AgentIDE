@@ -19,6 +19,7 @@ dependencies = [
     "agentide-schemas",
     "agentide-orchestrator",
     "agentide-rag",
+    "agentide-mcp",                     # MCP server registry + live discovery (Phase 6)
 ]
 
 [dependency-groups]
@@ -45,3 +46,4 @@ testpaths = ["tests"]
 agentide-schemas = { workspace = true }
 agentide-orchestrator = { workspace = true }
 agentide-rag = { workspace = true }
+agentide-mcp = { workspace = true }

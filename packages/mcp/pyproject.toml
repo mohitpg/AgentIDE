@@ -5,7 +5,14 @@ description = "MCP manager: server lifecycle, capability discovery, per-agent to
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.0",
+    "pydantic>=2.5",
     "agentide-schemas",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
 ]
 
 [build-system]

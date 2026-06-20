@@ -2,6 +2,8 @@
 
 import type {
   IngestResponse,
+  MCPDiscoverResponse,
+  MCPServer,
   RagDocument,
   RagSearchResponse,
   Session,
@@ -123,4 +125,50 @@ export async function searchRag(query: string, topK?: number): Promise<RagSearch
       body: JSON.stringify({ query, top_k: topK ?? null }),
     }),
   )
+}
+
+// ── MCP servers (Phase 6) ─────────────────────────────────────────────────────
+export type MCPServerCreate = Pick<MCPServer, 'id'> &
+  Partial<Omit<MCPServer, 'id' | 'created_at' | 'updated_at'>>
+
+export type MCPServerUpdate = Partial<Omit<MCPServer, 'id' | 'created_at' | 'updated_at'>>
+
+export async function listMcpServers(): Promise<MCPServer[]> {
+  return json(await fetch(`${API_BASE}/mcp`))
+}
+
+export async function listMcpBuiltins(): Promise<MCPServerCreate[]> {
+  return json(await fetch(`${API_BASE}/mcp/builtins`))
+}
+
+export async function createMcpServer(body: MCPServerCreate): Promise<MCPServer> {
+  const res = await fetch(`${API_BASE}/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<MCPServer>
+}
+
+export async function updateMcpServer(id: string, body: MCPServerUpdate): Promise<MCPServer> {
+  return json(
+    await fetch(`${API_BASE}/mcp/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
+}
+
+export async function deleteMcpServer(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/mcp/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+}
+
+export async function discoverMcpServer(id: string): Promise<MCPDiscoverResponse> {
+  return json(await fetch(`${API_BASE}/mcp/${id}/discover`, { method: 'POST' }))
 }
