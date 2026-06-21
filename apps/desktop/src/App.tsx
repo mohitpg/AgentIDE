@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import ChatPanel from './components/ChatPanel'
 import DocsPanel from './components/DocsPanel'
@@ -15,6 +15,11 @@ import './App.css'
 
 function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string | null>(null)
+  // A new chat starts as a client-side draft: it's open in the composer with an
+  // id, but isn't written to the DB / history until its first message is sent.
+  const [draftId, setDraftId] = useState<string | null>(null)
+  // Bumped to refresh the session list once a draft has been persisted.
+  const [sessionsRefresh, setSessionsRefresh] = useState(0)
   const [showHistory, setShowHistory] = useState(true)
   const [showTrace, setShowTrace] = useState(true)
   const [showTasks, setShowTasks] = useState(false)
@@ -22,8 +27,37 @@ function App(): JSX.Element {
   const [showMcp, setShowMcp] = useState(false)
   // Filename of the source a citation points at; opens + highlights the Sources panel.
   const [highlightDoc, setHighlightDoc] = useState<string | null>(null)
+
+  // Open a fresh draft chat — on startup, via "New chat", or after the active
+  // session is deleted — so a chat is always ready without touching the DB.
+  const newChat = useCallback((): void => {
+    const id = crypto.randomUUID()
+    setDraftId(id)
+    setActiveId(id)
+  }, [])
+
+  // Default opening behavior: a new chat is open as soon as the app starts.
+  useEffect(() => {
+    newChat()
+  }, [newChat])
+
+  const isDraft = activeId !== null && activeId === draftId
+
+  // The draft's first message persisted it server-side: stop treating it as a
+  // draft and refresh the history list so the new session shows up.
+  const handlePersisted = useCallback((): void => {
+    setDraftId(null)
+    setSessionsRefresh((n) => n + 1)
+  }, [])
+
+  // Empty id means "no session" (e.g. the active one was deleted) → open a draft.
+  const selectSession = useCallback((id: string): void => {
+    if (id) setActiveId(id)
+    else newChat()
+  }, [newChat])
+
   // One WebSocket for the session, shared by the chat and the trace panel.
-  const chat = useChat(activeId)
+  const chat = useChat(activeId, { isDraft, onPersisted: handlePersisted })
   // Separate WebSocket for async task progress (runs independently of chat).
   const tasks = useTasks()
   // Indexed-document list backing the Sources panel.
@@ -96,7 +130,9 @@ function App(): JSX.Element {
         {showHistory && (
           <SessionList
             activeId={activeId}
-            onSelect={(id) => setActiveId(id || null)}
+            onSelect={selectSession}
+            onNewChat={newChat}
+            refreshSignal={sessionsRefresh}
             onCollapse={() => setShowHistory(false)}
           />
         )}

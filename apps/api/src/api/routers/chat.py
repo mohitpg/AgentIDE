@@ -55,8 +55,12 @@ async def chat_ws(websocket: WebSocket) -> None:
             async with AsyncSessionLocal() as db:
                 conversation = await db.get(Conversation, req.session_id)
                 if conversation is None:
-                    await _send_error(websocket, run_id, "not_found", "Session not found")
-                    continue
+                    # First message of a new (draft) session. The UI opens a chat
+                    # with a client-generated id and only persists it here, on the
+                    # first send — so empty chats never reach the DB or history.
+                    conversation = Conversation(id=req.session_id)
+                    db.add(conversation)
+                    await db.flush()
 
                 db.add(
                     Message(

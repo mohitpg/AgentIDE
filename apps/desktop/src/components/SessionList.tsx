@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
 
-import { createSession, deleteSession, listSessions } from '../lib/api'
+import { deleteSession, listSessions } from '../lib/api'
 import type { Session } from '../types'
 
 interface Props {
   activeId: string | null
   onSelect: (id: string) => void
+  // Open a new (draft) chat. The session is created in the DB lazily, on its
+  // first message, so this never writes an empty conversation.
+  onNewChat: () => void
+  // Bump to re-fetch the list (e.g. after a draft is persisted).
+  refreshSignal?: number
   onCollapse?: () => void
 }
 
-export default function SessionList({ activeId, onSelect, onCollapse }: Props): JSX.Element {
+export default function SessionList({
+  activeId,
+  onSelect,
+  onNewChat,
+  refreshSignal,
+  onCollapse,
+}: Props): JSX.Element {
   const [sessions, setSessions] = useState<Session[]>([])
 
   const refresh = async (): Promise<void> => {
@@ -24,16 +35,11 @@ export default function SessionList({ activeId, onSelect, onCollapse }: Props): 
     void refresh()
   }, [])
 
-  // Pull in title/order updates after a turn changes the active session.
+  // Re-fetch when a draft is persisted (and when the active session changes,
+  // to pull in title/order updates).
   useEffect(() => {
     void refresh()
-  }, [activeId])
-
-  const handleNew = async (): Promise<void> => {
-    const session = await createSession()
-    await refresh()
-    onSelect(session.id)
-  }
+  }, [activeId, refreshSignal])
 
   const handleDelete = async (e: React.MouseEvent, id: string): Promise<void> => {
     e.stopPropagation()
@@ -57,7 +63,7 @@ export default function SessionList({ activeId, onSelect, onCollapse }: Props): 
           </button>
         )}
       </div>
-      <button className="new-chat" onClick={() => void handleNew()}>
+      <button className="new-chat" onClick={onNewChat}>
         + New chat
       </button>
       <ul className="session-list">

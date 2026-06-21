@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import Settings, get_settings
 from api.db.session import get_db
+from api.models.conversation import Conversation
 from api.models.task import Task
 from api.schemas.rag import (
     IngestResponse,
@@ -69,6 +70,21 @@ def _upload_dir(settings: Settings) -> Path:
 
 def _safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120] or "document"
+
+
+async def _resolve_session(
+    db: AsyncSession, session_id: uuid.UUID | None
+) -> uuid.UUID | None:
+    """Keep the optional chat-session link only if that conversation exists.
+
+    Uploads can come from a brand-new (draft) chat that hasn't been persisted
+    yet; linking to a non-existent conversation would violate the FK, so we drop
+    the link in that case rather than fail the upload.
+    """
+    if session_id is None:
+        return None
+    exists = await db.get(Conversation, session_id)
+    return session_id if exists is not None else None
 
 
 def _validate_upload(data: bytes, settings: Settings) -> None:
@@ -111,6 +127,7 @@ async def upload_document(
 ) -> IngestResponse:
     data = await file.read()
     _validate_upload(data, get_settings())
+    session_id = await _resolve_session(db, session_id)
 
     try:
         result = await pipeline.ingest(
@@ -151,6 +168,7 @@ async def upload_document_async(
     settings = get_settings()
     data = await file.read()
     _validate_upload(data, settings)
+    session_id = await _resolve_session(db, session_id)
 
     filename = file.filename or "document"
     task = Task(
