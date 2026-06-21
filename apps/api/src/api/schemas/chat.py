@@ -8,10 +8,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class SessionCreate(BaseModel):
-    title: str | None = None
-
-
 class MessageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

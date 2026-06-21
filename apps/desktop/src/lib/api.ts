@@ -24,16 +24,6 @@ export async function listSessions(): Promise<Session[]> {
   return json(await fetch(`${API_BASE}/sessions`))
 }
 
-export async function createSession(title?: string): Promise<Session> {
-  return json(
-    await fetch(`${API_BASE}/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title ?? null }),
-    }),
-  )
-}
-
 export async function getSession(id: string): Promise<SessionDetail> {
   return json(await fetch(`${API_BASE}/sessions/${id}`))
 }

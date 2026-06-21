@@ -16,21 +16,9 @@ from sqlalchemy.orm import selectinload
 
 from api.db.session import get_db
 from api.models.conversation import Conversation
-from api.schemas.chat import SessionCreate, SessionDetail, SessionRead
+from api.schemas.chat import SessionDetail, SessionRead
 
 router = APIRouter()
-
-
-@router.post("", response_model=SessionRead, status_code=status.HTTP_201_CREATED)
-async def create_session(
-    payload: SessionCreate,
-    db: AsyncSession = Depends(get_db),
-) -> Conversation:
-    conversation = Conversation(title=payload.title)
-    db.add(conversation)
-    await db.flush()
-    await db.refresh(conversation)
-    return conversation
 
 
 @router.get("", response_model=list[SessionRead])
@@ -62,10 +50,11 @@ async def delete_session(
     session_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    result = await db.execute(
-        select(Conversation).where(Conversation.id == session_id)
-    )
-    conversation = result.scalar_one_or_none()
+    conversation = await db.get(Conversation, session_id)
     if conversation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
     await db.delete(conversation)
+    # Commit here (like the other write routes) so the row is gone before the
+    # 204 returns; otherwise get_db's deferred commit races the client's refresh,
+    # making deletes lag by a click.
+    await db.commit()
