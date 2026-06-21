@@ -166,12 +166,23 @@
 }
 
 .composer {
+  height: 10vh;
   border-top: 1px solid #1f1f1f;
-  background: #141414;
   padding: 12px 24px;
   display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Cap the controls to the message column width (centered) so the box stays
+   aligned with the content instead of stretching across the whole window when
+   the side panels are collapsed. */
+.composer-inner {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
   gap: 10px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .composer textarea {
@@ -179,12 +190,12 @@
   resize: none;
   background: #1b1b1b;
   border: 1px solid #2a2a2a;
-  border-radius: 8px;
+  border-radius: 30px;
   color: #e5e5e5;
   padding: 10px 12px;
   font-family: inherit;
   font-size: 0.9rem;
-  line-height: 1.4;
+  line-height: 1;
 }
 .composer textarea:focus { outline: none; border-color: #6366f1; }
 
@@ -220,6 +231,12 @@
   font-size: 0.78rem;
   border-top: 1px solid #1f1f1f;
   background: #141414;
+  display: flex;
+  justify-content: center;
+}
+.upload-status-inner {
+  width: 100%;
+  max-width: 760px;
 }
 .upload-status.indexing { color: #9ca3af; }
 .upload-status.done { color: #4ade80; }

@@ -13,6 +13,9 @@ import { useMcp } from './hooks/useMcp'
 import { useTasks } from './hooks/useTasks'
 import './App.css'
 
+// The right side hosts exactly one panel at a time (or none).
+type RightPanel = 'trace' | 'tasks' | 'docs' | 'mcp'
+
 function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string | null>(null)
   // A new chat starts as a client-side draft: it's open in the composer with an
@@ -21,10 +24,8 @@ function App(): JSX.Element {
   // Bumped to refresh the session list once a draft has been persisted.
   const [sessionsRefresh, setSessionsRefresh] = useState(0)
   const [showHistory, setShowHistory] = useState(true)
-  const [showTrace, setShowTrace] = useState(true)
-  const [showTasks, setShowTasks] = useState(false)
-  const [showDocs, setShowDocs] = useState(false)
-  const [showMcp, setShowMcp] = useState(false)
+  // One right-hand panel open at a time; opening another closes the current one.
+  const [rightPanel, setRightPanel] = useState<RightPanel | null>('trace')
   // Filename of the source a citation points at; opens + highlights the Sources panel.
   const [highlightDoc, setHighlightDoc] = useState<string | null>(null)
 
@@ -65,9 +66,13 @@ function App(): JSX.Element {
   // Registered MCP servers backing the MCP settings panel.
   const mcp = useMcp()
 
+  // Click a panel's toggle: open it, or close it if it's already the open one.
+  const toggleRight = (panel: RightPanel): void =>
+    setRightPanel((cur) => (cur === panel ? null : panel))
+
   const openSource = (filename: string): void => {
     setHighlightDoc(filename)
-    setShowDocs(true)
+    setRightPanel('docs')
   }
 
   return (
@@ -91,34 +96,34 @@ function App(): JSX.Element {
             History
           </button>
           <button
-            className={`panel-toggle ${showTrace ? 'on' : ''}`}
-            onClick={() => setShowTrace((v) => !v)}
+            className={`panel-toggle ${rightPanel === 'trace' ? 'on' : ''}`}
+            onClick={() => toggleRight('trace')}
             title="Toggle agent trace panel"
-            aria-pressed={showTrace}
+            aria-pressed={rightPanel === 'trace'}
           >
             Trace
           </button>
           <button
-            className={`panel-toggle ${showTasks ? 'on' : ''}`}
-            onClick={() => setShowTasks((v) => !v)}
+            className={`panel-toggle ${rightPanel === 'tasks' ? 'on' : ''}`}
+            onClick={() => toggleRight('tasks')}
             title="Toggle async tasks panel"
-            aria-pressed={showTasks}
+            aria-pressed={rightPanel === 'tasks'}
           >
             Tasks
           </button>
           <button
-            className={`panel-toggle ${showDocs ? 'on' : ''}`}
-            onClick={() => setShowDocs((v) => !v)}
+            className={`panel-toggle ${rightPanel === 'docs' ? 'on' : ''}`}
+            onClick={() => toggleRight('docs')}
             title="Toggle indexed sources panel"
-            aria-pressed={showDocs}
+            aria-pressed={rightPanel === 'docs'}
           >
             Sources
           </button>
           <button
-            className={`panel-toggle ${showMcp ? 'on' : ''}`}
-            onClick={() => setShowMcp((v) => !v)}
+            className={`panel-toggle ${rightPanel === 'mcp' ? 'on' : ''}`}
+            onClick={() => toggleRight('mcp')}
             title="Toggle MCP servers panel"
-            aria-pressed={showMcp}
+            aria-pressed={rightPanel === 'mcp'}
           >
             MCP
           </button>
@@ -142,16 +147,20 @@ function App(): JSX.Element {
           onIndexed={documents.refresh}
           onOpenSource={openSource}
         />
-        {showTrace && <TracePanel trace={chat.trace} onCollapse={() => setShowTrace(false)} />}
-        {showTasks && <TasksPanel tasks={tasks} onCollapse={() => setShowTasks(false)} />}
-        {showDocs && (
+        {rightPanel === 'trace' && (
+          <TracePanel trace={chat.trace} onCollapse={() => setRightPanel(null)} />
+        )}
+        {rightPanel === 'tasks' && (
+          <TasksPanel tasks={tasks} onCollapse={() => setRightPanel(null)} />
+        )}
+        {rightPanel === 'docs' && (
           <DocsPanel
             documents={documents}
             highlight={highlightDoc}
-            onCollapse={() => setShowDocs(false)}
+            onCollapse={() => setRightPanel(null)}
           />
         )}
-        {showMcp && <McpPanel mcp={mcp} onCollapse={() => setShowMcp(false)} />}
+        {rightPanel === 'mcp' && <McpPanel mcp={mcp} onCollapse={() => setRightPanel(null)} />}
       </main>
     </div>
   )
