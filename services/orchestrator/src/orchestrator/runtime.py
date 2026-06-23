@@ -33,7 +33,7 @@ from schemas.events import DoneEvent
 
 from orchestrator.directory import AgentDirectory
 from orchestrator.llm import LLMConfig, build_chat_model, system_message
-from orchestrator.supervisor import build_supervisor_graph
+from orchestrator.supervisor import STEP_CAP, build_supervisor_graph
 
 logger = logging.getLogger(__name__)
 
@@ -136,11 +136,14 @@ class Orchestrator:
         run_id: str,
         session_id: str,
         user_id: str,
+        mode: str = "auto",
     ) -> AsyncIterator[object]:
         """
-        Run one chat turn through the supervisor. `session_id` is the checkpointer
-        thread, so prior turns are restored automatically — we only feed the new
-        user message.
+        Run one chat turn through the supervisor loop. `session_id` is the
+        checkpointer thread, so prior turns are restored automatically — we only
+        feed the new user message. `mode` ("auto"|"agent"|"chat") biases the
+        supervisor and is reseeded each turn (it has no reducer, so the seeded
+        value overrides any value left in the checkpoint).
 
         Forwards the supervisor's StreamEvents (agent_step / token / done / error)
         as they are emitted, stamping `duration_ms` onto the terminal `done`.
@@ -151,12 +154,24 @@ class Orchestrator:
         await self._refresh_directory()
 
         started = time.monotonic()
-        config = {"configurable": {"thread_id": session_id}}
+        config = {
+            "configurable": {"thread_id": session_id},
+            # Hard backstop in case the step_count cap is ever bypassed: each loop
+            # is at most supervisor+delegate (2 supersteps), plus a final
+            # supervisor→respond pair (~2*cap+2). A little headroom is added so this
+            # backstop never preempts the intended STEP_CAP bound on a normal run.
+            "recursion_limit": 2 * STEP_CAP + 4,
+        }
         graph_input = {
             "messages": [HumanMessage(content=content)],
             "run_id": run_id,
             "session_id": session_id,
             "user_id": user_id,
+            # Reset the per-turn loop state (no reducers ⇒ these overwrite whatever
+            # the checkpoint restored, scoping them to this turn).
+            "step_count": 0,
+            "artifacts": [],
+            "mode": mode,
         }
 
         async for event in self._graph.astream(

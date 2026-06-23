@@ -19,14 +19,26 @@ class GraphState(TypedDict):
     # Which specialist agent was last routed to
     active_agent: str | None
 
-    # The supervisor's routing decision for the current turn
-    # {"agent": str, "skill": str | None, "input": dict, "reason": str}
+    # The supervisor's most recent decision (recomputed every loop pass)
+    # {"next": str, "skill": str | None, "input": dict, "reason": str}
+    # `next` is a known agent id, or "respond" to compose the final answer.
     route_decision: dict[str, Any] | None
+
+    # How many specialist (delegate) hops have run this turn — the supervisor
+    # loop's bound. Seeded to 0 each turn; incremented by `delegate_node`.
+    step_count: int
+
+    # Execution mode for the turn: "auto" (supervisor decides), "agent" (prefer
+    # specialists), or "chat" (short-circuit straight to respond, no specialists).
+    mode: str
 
     # Retrieved RAG context (populated by RAG node)
     rag_context: list[dict[str, Any]]
 
-    # Structured artifacts produced by agents (code, summaries, images)
+    # Structured artifacts produced by agents this turn (code, summaries, images).
+    # Per-turn scoped: `delegate_node` accumulates into it (no reducer — it rewrites
+    # the full list), and the runtime reseeds it to [] at the start of each turn so
+    # the supervisor only sees the current turn's steps.
     artifacts: list[dict[str, Any]]
 
     # Human-in-the-loop interrupt payload (Phase 7)
