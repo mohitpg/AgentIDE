@@ -8,9 +8,27 @@ couple of message-history accessors.
 
 from __future__ import annotations
 
+import re
+
 from langchain_core.messages import HumanMessage
 
 from orchestrator.state import GraphState
+
+# Inline base64 image data URI (kept in sync with the vision agent's extractor).
+_DATA_URI_RE = re.compile(r"data:image/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+")
+
+
+def redact_images(text: str) -> str:
+    """Replace inline base64 image data URIs with a short placeholder.
+
+    Images ride inside the turn text as data URIs (see the vision agent). The full
+    blob must reach the vision agent verbatim, but LLM *reasoning* calls — supervisor
+    routing and respond synthesis — only need to know an image is present. A pasted
+    screenshot is 100KB+ of base64 (~150k tokens); leaving it inline bloats every
+    routing pass and can overflow the model's context window, so we strip it here
+    while the delegate path forwards the original text untouched.
+    """
+    return _DATA_URI_RE.sub("[image attached]", text)
 
 try:  # available in langgraph >= 0.2
     from langgraph.config import get_stream_writer

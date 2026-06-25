@@ -7,13 +7,27 @@ export interface Session {
   updated_at: string
 }
 
+// One intermediate specialist step shown as a collapsible "Thinking" disclosure
+// on an assistant message (built live from agent_step + thinking-channel tokens).
+export interface AgentStep {
+  agent: string
+  skill?: string | null
+  content: string
+  done: boolean
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   run_id?: string | null
   created_at: string
+  // Intermediate supervisor-loop steps (assistant messages only; not persisted).
+  steps?: AgentStep[]
 }
+
+// Supervisor execution mode chosen in the composer; sent with each message.
+export type ChatMode = 'auto' | 'agent' | 'chat'
 
 export interface SessionDetail extends Session {
   messages: Message[]

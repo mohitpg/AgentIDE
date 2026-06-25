@@ -24,6 +24,19 @@ class EventType(StrEnum):
     DONE = "done"  # Run complete
 
 
+class Channel(StrEnum):
+    """Which stream a token belongs to (carried in ``TokenEvent.data['channel']``).
+
+    The supervisor loop streams intermediate specialist output on ``THINKING`` and
+    the composed final answer on ``FINAL``. The UI collapses ``THINKING`` tokens
+    into a disclosure and renders ``FINAL`` as the answer body. Absent ⇒ ``FINAL``,
+    so this is backward-compatible with emitters that don't set it.
+    """
+
+    THINKING = "thinking"
+    FINAL = "final"
+
+
 class StreamEvent(BaseModel):
     """Base event. All fields are always present on the wire."""
 
@@ -37,7 +50,10 @@ class StreamEvent(BaseModel):
 
 
 class TokenEvent(StreamEvent):
-    """data: {"content": str, "index": int}"""
+    """data: {"content": str, "index": int, "channel": "thinking"|"final"}
+
+    ``channel`` defaults to ``"final"`` when absent (see ``Channel``).
+    """
 
     type: EventType = EventType.TOKEN
 

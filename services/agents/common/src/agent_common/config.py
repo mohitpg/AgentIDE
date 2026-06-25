@@ -29,7 +29,7 @@ class AgentSettings(BaseSettings):
     openrouter_model: str = "poolside/laguna-xs.2:free"
     # Multimodal model for the Vision agent (Phase 5). Must be vision-capable; the
     # text default above generally is not. Override via OPENROUTER_VISION_MODEL.
-    openrouter_vision_model: str = "meta-llama/llama-3.2-11b-vision-instruct:free"
+    openrouter_vision_model: str = "nvidia/nemotron-3.5-content-safety:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.3  # specialists run cooler than the chat default
 

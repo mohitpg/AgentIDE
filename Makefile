@@ -71,6 +71,9 @@ rag-agent-dev: ## Run the RAG A2A agent (port 8103). Self-registers so the super
 vision-agent-dev: ## Run the Vision A2A agent (port 8104). Self-registers so the supervisor can route to it.
 	cd services/agents/vision && uv run python -m agent_vision
 
+code-agent-dev: ## Run the Code A2A agent (port 8102). Self-registers so the supervisor can route to it.
+	cd services/agents/code && uv run python -m agent_code
+
 # ── Quality ────────────────────────────────────────────────────────────────────
 lint: ## Run ruff check + format-check + eslint
 	uv run ruff check .

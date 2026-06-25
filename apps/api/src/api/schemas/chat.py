@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,3 +37,6 @@ class ChatRequest(BaseModel):
 
     session_id: uuid.UUID
     content: str = Field(min_length=1)
+    # Execution mode for the supervisor loop: "auto" decides per turn, "agent"
+    # prefers specialists, "chat" answers directly without delegating.
+    mode: Literal["auto", "agent", "chat"] = "auto"

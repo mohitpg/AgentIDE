@@ -68,6 +68,8 @@ async def test_fast_path_emits_token_and_done_sequence() -> None:
 
     tokens = [e for e in events if e.type == EventType.TOKEN]
     assert "".join(e.data["content"] for e in tokens) == "Hello there"
+    # the fast path streams only the final channel (no Thinking block)
+    assert all(e.data.get("channel") == "final" for e in tokens)
     assert all(e.run_id == "run-1" for e in events)
     # the fast path emits exactly one DONE (no per-delegate done events)
     assert sum(1 for e in events if e.type == EventType.DONE) == 1
@@ -84,10 +86,15 @@ async def test_delegate_then_respond_streams_both_and_one_done() -> None:
 
     events = await _run(orch, "write code", run_id="r2")
 
-    # both the specialist's tokens and the composed answer streamed, in order
-    body = "".join(e.data["content"] for e in events if e.type == EventType.TOKEN)
-    assert "from agent" in body
-    assert body.endswith("composed final answer")
+    # the specialist streams on the "thinking" channel, the composed answer on "final"
+    thinking = [
+        e for e in events if e.type == EventType.TOKEN and e.data.get("channel") == "thinking"
+    ]
+    final = [
+        e for e in events if e.type == EventType.TOKEN and e.data.get("channel") == "final"
+    ]
+    assert "".join(e.data["content"] for e in thinking) == "from agent"
+    assert "".join(e.data["content"] for e in final) == "composed final answer"
     # the trace names the code agent that ran
     assert any(
         e.data.get("agent") == "code" for e in events if e.type == EventType.AGENT_STEP

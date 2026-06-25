@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getSession, WS_URL } from '../lib/api'
 import { applyTraceEvent, type TraceRun } from '../lib/trace'
-import type { Message, StreamEvent } from '../types'
+import type { ChatMode, Message, StreamEvent } from '../types'
 
 type Status = 'idle' | 'streaming'
 
@@ -11,7 +11,7 @@ export interface UseChat {
   status: Status
   connected: boolean
   trace: TraceRun[]
-  send: (content: string) => void
+  send: (content: string, mode?: ChatMode) => void
 }
 
 export interface UseChatOptions {
@@ -109,15 +109,73 @@ export function useChat(sessionId: string | null, opts: UseChatOptions = {}): Us
     switch (event.type) {
       case 'token': {
         const chunk = String(event.data.content ?? '')
+        // "thinking" tokens belong to the open intermediate step; "final" (or
+        // absent, for older emitters) is the answer body.
+        const thinking = event.data.channel === 'thinking'
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === streamingIdRef.current ? { ...m, content: m.content + chunk } : m,
-          ),
+          prev.map((m) => {
+            if (m.id !== streamingIdRef.current) return m
+            if (!thinking) return { ...m, content: m.content + chunk }
+            const steps = (m.steps ?? []).slice()
+            for (let i = steps.length - 1; i >= 0; i--) {
+              if (!steps[i].done) {
+                steps[i] = { ...steps[i], content: steps[i].content + chunk }
+                break
+              }
+            }
+            return { ...m, steps }
+          }),
+        )
+        break
+      }
+      case 'agent_step': {
+        // Each delegate hop becomes a "Thinking" disclosure: open on enter,
+        // close on exit. Supervisor/respond steps stay in the trace panel only.
+        if (event.data.node !== 'delegate') break
+        const phase = String(event.data.phase ?? '')
+        const agent = String(event.data.agent ?? 'agent')
+        const skill = typeof event.data.skill === 'string' ? event.data.skill : null
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== streamingIdRef.current) return m
+            const steps = (m.steps ?? []).slice()
+            if (phase === 'enter') {
+              steps.push({ agent, skill, content: '', done: false })
+            } else if (phase === 'exit') {
+              for (let i = steps.length - 1; i >= 0; i--) {
+                if (steps[i].agent === agent && !steps[i].done) {
+                  steps[i] = { ...steps[i], done: true }
+                  break
+                }
+              }
+            }
+            return { ...m, steps }
+          }),
         )
         break
       }
       case 'error': {
         const msg = String(event.data.message ?? 'Something went wrong')
+        // Recoverable errors (e.g. one specialist is down) are not terminal — the
+        // supervisor continues and a final `done` still arrives. Note the failure
+        // on the open Thinking step and keep streaming.
+        if (event.data.recoverable === true) {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== streamingIdRef.current) return m
+              const steps = (m.steps ?? []).slice()
+              for (let i = steps.length - 1; i >= 0; i--) {
+                if (!steps[i].done) {
+                  const sep = steps[i].content ? '\n' : ''
+                  steps[i] = { ...steps[i], content: `${steps[i].content}${sep}⚠️ ${msg}` }
+                  break
+                }
+              }
+              return { ...m, steps }
+            }),
+          )
+          break
+        }
         setMessages((prev) =>
           prev.map((m) =>
             m.id === streamingIdRef.current
@@ -136,14 +194,14 @@ export function useChat(sessionId: string | null, opts: UseChatOptions = {}): Us
         flushPersist()
         break
       }
-      // agent_step / tool_* are surfaced in the Phase 2 trace panel (above).
+      // tool_* are surfaced in the trace panel (via applyTraceEvent above).
       default:
         break
     }
   }, [])
 
   const send = useCallback(
-    (content: string): void => {
+    (content: string, mode: ChatMode = 'auto'): void => {
       const ws = wsRef.current
       if (!sessionId || !content.trim() || status === 'streaming') return
       if (!ws || ws.readyState !== WebSocket.OPEN) return
@@ -162,7 +220,7 @@ export function useChat(sessionId: string | null, opts: UseChatOptions = {}): Us
         { id: assistantId, role: 'assistant', content: '', created_at: now },
       ])
       setStatus('streaming')
-      ws.send(JSON.stringify({ session_id: sessionId, content }))
+      ws.send(JSON.stringify({ session_id: sessionId, content, mode }))
     },
     [sessionId, status],
   )

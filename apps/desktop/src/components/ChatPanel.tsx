@@ -2,9 +2,27 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { UseChat } from '../hooks/useChat'
 import { getTask, uploadDocumentAsync } from '../lib/api'
-import type { Task } from '../types'
+import { fileToDataUri, withImages, type Attachment } from '../lib/images'
+import type { ChatMode, Task } from '../types'
 import { TASK_TERMINAL } from '../types'
 import MessageContent from './MessageContent'
+
+const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp'
+const DOC_ACCEPT =
+  '.txt,.md,.markdown,.pdf,.py,.js,.ts,.tsx,.json,.csv,.rst,.html,text/*,application/pdf'
+
+// Composer execution-mode toggle. Persisted so the choice survives reloads.
+const MODE_KEY = 'agentide.chatMode'
+const MODES: { value: ChatMode; label: string; title: string }[] = [
+  { value: 'auto', label: 'Auto', title: 'Supervisor decides when to use specialists' },
+  { value: 'agent', label: 'Agent', title: 'Prefer multi-agent specialists' },
+  { value: 'chat', label: 'Chat', title: 'Plain chat — never delegates' },
+]
+
+function loadMode(): ChatMode {
+  const saved = localStorage.getItem(MODE_KEY)
+  return saved === 'agent' || saved === 'chat' ? saved : 'auto'
+}
 
 interface Props {
   sessionId: string | null
@@ -37,19 +55,43 @@ async function pollTask(id: string, onTick: (t: Task) => void): Promise<Task> {
 export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: Props): JSX.Element {
   const { messages, status, connected, send } = chat
   const [input, setInput] = useState('')
+  const [mode, setMode] = useState<ChatMode>(loadMode)
   const [upload, setUpload] = useState<UploadState>({ kind: 'idle' })
+  // Images attached to the next message (sent inline to the vision agent).
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  // The composer "+" attach menu (dropup) open state.
+  const [menuOpen, setMenuOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const docRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<HTMLInputElement>(null)
+  const attachWrapRef = useRef<HTMLDivElement>(null)
+
+  // Persist the mode choice across reloads.
+  useEffect(() => {
+    localStorage.setItem(MODE_KEY, mode)
+  }, [mode])
 
   // Keep the latest message in view as tokens stream in.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
 
+  // Close the attach menu on an outside click.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent): void => {
+      if (!attachWrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
+
   const submit = (): void => {
-    if (!input.trim()) return
-    send(input)
+    // An image alone (no typed prompt) is a valid vision request.
+    if (!input.trim() && attachments.length === 0) return
+    send(withImages(input, attachments), mode)
     setInput('')
+    setAttachments([])
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -57,6 +99,35 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
       e.preventDefault()
       submit()
     }
+  }
+
+  // Turn image files (from paste, the file picker, or drop) into inline attachments.
+  const addImageFiles = async (files: Iterable<File>): Promise<void> => {
+    const imgs = [...files].filter((f) => f.type.startsWith('image/'))
+    const next = await Promise.all(
+      imgs.map(async (f) => ({ dataUri: await fileToDataUri(f), name: f.name || 'pasted-image' })),
+    )
+    if (next.length) setAttachments((prev) => [...prev, ...next])
+  }
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+    const files = [...e.clipboardData.items]
+      .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => f !== null)
+    if (files.length === 0) return // let normal text paste through
+    e.preventDefault()
+    void addImageFiles(files)
+  }
+
+  const onImageSelected = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = e.target.files
+    e.target.value = '' // allow re-selecting the same file
+    if (files) void addImageFiles(files)
+  }
+
+  const removeAttachment = (i: number): void => {
+    setAttachments((prev) => prev.filter((_, idx) => idx !== i))
   }
 
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -131,38 +202,113 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
 
       <div className="composer">
         <input
-          ref={fileRef}
+          ref={docRef}
           type="file"
-          accept=".txt,.md,.markdown,.pdf,.py,.js,.ts,.tsx,.json,.csv,.rst,.html,text/*,application/pdf"
+          accept={DOC_ACCEPT}
           style={{ display: 'none' }}
           onChange={onFileSelected}
         />
+        <input
+          ref={imageRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          style={{ display: 'none' }}
+          onChange={onImageSelected}
+        />
+        <div className="mode-toggle" role="group" aria-label="Chat mode">
+          {MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              className={`mode-option ${mode === m.value ? 'active' : ''}`}
+              title={m.title}
+              aria-pressed={mode === m.value}
+              onClick={() => setMode(m.value)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {attachments.length > 0 && (
+          <div className="attachments">
+            {attachments.map((a, i) => (
+              <span className="attachment-chip" key={i} title={a.name}>
+                <img className="attachment-thumb" src={a.dataUri} alt="" />
+                <span className="attachment-name">{a.name}</span>
+                <button
+                  type="button"
+                  className="attachment-remove"
+                  onClick={() => removeAttachment(i)}
+                  aria-label={`Remove ${a.name}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="composer-inner">
-          <button
-            className="composer-upload"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            title="Upload a document to the knowledge base"
-            aria-label="Upload document"
-          >
-            {uploading ? (
-              '…'
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
+          <div className="attach" ref={attachWrapRef}>
+            <button
+              type="button"
+              className="composer-upload"
+              onClick={() => setMenuOpen((o) => !o)}
+              disabled={uploading}
+              title="Attach an image or document"
+              aria-label="Attach"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              {uploading ? (
+                '…'
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              )}
+            </button>
+            {menuOpen && (
+              <div className="attach-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    imageRef.current?.click()
+                  }}
+                >
+                  Attach image
+                  <span className="attach-menu-hint">for the vision agent — analyse / OCR</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    docRef.current?.click()
+                  }}
+                >
+                  Upload document
+                  <span className="attach-menu-hint">index into the knowledge base (RAG)</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             placeholder={connected ? 'Send a message…  (Enter to send, Shift+Enter for newline)' : 'Connecting…'}
             rows={2}
             disabled={!connected}
           />
-          <button onClick={submit} disabled={!connected || status === 'streaming' || !input.trim()}>
+          <button
+            onClick={submit}
+            disabled={!connected || status === 'streaming' || (!input.trim() && attachments.length === 0)}
+          >
             {status === 'streaming' ? '…' : 'Send'}
           </button>
         </div>

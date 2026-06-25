@@ -73,6 +73,7 @@ class CodeAgent(BaseAgent):
     ) -> AsyncIterator[str]:
         # No connected manager (MCP disabled, or invoked outside the app lifespan)
         # → plain LLM streaming from the BaseAgent default.
+        print("codeagent->",self._manager)
         if self._manager is None:
             async for chunk in super().run(skill_id, user_input, run_id=run_id):
                 yield chunk

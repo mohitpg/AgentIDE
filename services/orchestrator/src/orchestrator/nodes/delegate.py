@@ -15,7 +15,7 @@ import logging
 from typing import Any, Protocol
 
 from langchain_core.messages import AIMessage
-from schemas.events import AgentStepEvent, ErrorEvent, TokenEvent
+from schemas.events import AgentStepEvent, Channel, ErrorEvent, TokenEvent
 
 from orchestrator.directory import AgentDirectory
 from orchestrator.nodes.base import stream_writer
@@ -55,7 +55,9 @@ class DelegateNode:
                 if ev.get("type") == "token":
                     piece = ev["data"].get("content", "")
                     text += piece
-                    writer(TokenEvent(run_id=run_id, data={"content": piece, "index": index}))
+                    # Intermediate step output → the UI's collapsible "Thinking" stream.
+                    writer(TokenEvent(run_id=run_id, data={
+                        "content": piece, "index": index, "channel": Channel.THINKING}))
                     index += 1
                 elif ev.get("type") == "done":
                     result = ev.get("data", {})

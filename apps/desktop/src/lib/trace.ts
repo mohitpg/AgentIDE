@@ -27,7 +27,8 @@ export interface TraceStep {
   agent: string
   node: string
   skill?: string | null
-  // Router decision (present on the supervisor's `route` step).
+  // Supervisor decision (present on each `supervisor` step: the next agent, or
+  // "respond"). The supervisor recurs, so a run holds one of these per loop pass.
   decisionAgent?: string
   decisionSkill?: string | null
   reason?: string
@@ -45,7 +46,8 @@ export interface TraceRun {
 }
 
 interface Decision {
-  agent?: string
+  next?: string // supervisor's chosen agent or "respond"
+  agent?: string // legacy key, kept for backward compatibility
   skill?: string | null
   reason?: string
 }
@@ -102,6 +104,8 @@ export function applyTraceEvent(runs: TraceRun[], event: StreamEvent): TraceRun[
       const agent = str(data.agent, 'agent')
       const node = str(data.node)
       if (phase === 'enter') {
+        // Key by occurrence (steps.length), so each loop pass of a recurring node
+        // (e.g. the supervisor) is its own step rather than colliding by name.
         run.steps.push({
           id: `${runId}:${agent}:${node}:${run.steps.length}`,
           agent,
@@ -111,6 +115,8 @@ export function applyTraceEvent(runs: TraceRun[], event: StreamEvent): TraceRun[
           tools: [],
         })
       } else if (phase === 'exit') {
+        // Close the most recent still-running step matching this node — enter/exit
+        // are balanced per pass, so this resolves each recurrence in order.
         for (let i = run.steps.length - 1; i >= 0; i--) {
           const s = run.steps[i]
           if (s.agent === agent && s.node === node && s.status === 'running') {
@@ -119,7 +125,7 @@ export function applyTraceEvent(runs: TraceRun[], event: StreamEvent): TraceRun[
               ...s,
               status: 'done',
               skill: s.skill ?? (typeof data.skill === 'string' ? data.skill : s.skill),
-              decisionAgent: decision?.agent ?? s.decisionAgent,
+              decisionAgent: decision?.next ?? decision?.agent ?? s.decisionAgent,
               decisionSkill: decision?.skill ?? s.decisionSkill,
               reason: decision?.reason ?? s.reason,
             }
@@ -170,6 +176,9 @@ export function applyTraceEvent(runs: TraceRun[], event: StreamEvent): TraceRun[
     }
 
     case 'error': {
+      // A recoverable error (e.g. one specialist down) doesn't fail the run — the
+      // supervisor continues and the terminal `done` closes it. Leave status be.
+      if (data.recoverable === true) break
       run.status = 'error'
       run.error = str(data.message, 'Something went wrong')
       run.steps = closeRunningSteps(run.steps)

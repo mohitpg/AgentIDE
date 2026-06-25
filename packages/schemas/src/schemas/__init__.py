@@ -6,6 +6,7 @@ import them from `a2a.types`, not from here.
 
 from schemas.events import (
     AgentStepEvent,
+    Channel,
     DoneEvent,
     ErrorEvent,
     EventType,
@@ -18,6 +19,7 @@ from schemas.events import (
 
 __all__ = [
     "AgentStepEvent",
+    "Channel",
     "DoneEvent",
     "ErrorEvent",
     "EventType",

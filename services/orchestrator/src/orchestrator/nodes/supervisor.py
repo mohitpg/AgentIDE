@@ -19,10 +19,12 @@ from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import Runnable
+from pydantic import BaseModel, Field
 from schemas.events import AgentStepEvent
 
 from orchestrator.directory import AgentDirectory
-from orchestrator.nodes.base import history, last_human_text, stream_writer
+from orchestrator.nodes.base import last_human_text, redact_images, stream_writer
 from orchestrator.state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -76,28 +78,67 @@ _VALID = {
 }
 
 
-def _parse_decision(raw: str) -> dict[str, Any]:
-    """Extract the supervisor's JSON decision, defaulting to `respond` on failure.
+class RouterDecision(BaseModel):
+    """The supervisor's routing decision, enforced as structured output.
 
-    Accepts `{"next": ...}` (preferred) or the legacy `{"agent": ...}` key. Any
-    `next` that is not a known agent (e.g. "respond", "done", garbage) snaps to
+    Constraining the model to this schema is what stops it from replying in
+    natural prose (which the old `re.search(r"\\{.*\\}")` extraction could not
+    survive). `next` / `skill` are still validated and snapped to known values by
+    `_normalize` afterwards, so an off-schema string never breaks routing.
+    """
+
+    next: str = Field(
+        description=(
+            "The single next step: an agent id (one of: code, summarizer, rag, "
+            "vision) to delegate to, or 'respond' to compose the final answer."
+        ),
+    )
+    skill: str | None = Field(
+        default=None,
+        description="The chosen agent's skill id, or null when next is 'respond'.",
+    )
+    reason: str = Field(default="", description="One-line justification for the choice.")
+
+
+def _normalize(nxt: str | None, skill: str | None, reason: str) -> dict[str, Any]:
+    """Snap a raw (next, skill) pair onto a valid decision.
+
+    Any `next` that is not a known agent (e.g. "respond", "done", garbage) becomes
     the terminal respond sentinel; an invalid skill snaps to a valid one.
+    """
+    nxt = nxt or RESPOND
+    if nxt in _VALID:
+        if skill not in _VALID[nxt]:
+            skill = next(iter(_VALID[nxt]))  # snap to a valid skill
+    else:  # "respond" / "done" / unknown → terminal
+        nxt, skill = RESPOND, None
+    return {"next": nxt, "skill": skill, "reason": reason or ""}
+
+
+def _parse_decision(raw: str) -> dict[str, Any]:
+    """Scrape a JSON decision out of free text, defaulting to `respond` on failure.
+
+    Fallback path for models that ignore structured output and answer in prose.
+    Accepts `{"next": ...}` (preferred) or the legacy `{"agent": ...}` key.
     """
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         try:
             data = json.loads(match.group(0))
-            nxt = data.get("next") or data.get("agent") or RESPOND
-            skill = data.get("skill")
-            if nxt in _VALID:
-                if skill not in _VALID[nxt]:
-                    skill = next(iter(_VALID[nxt]))  # snap to a valid skill
-            else:  # "respond" / "done" / unknown → terminal
-                nxt, skill = RESPOND, None
-            return {"next": nxt, "skill": skill, "reason": data.get("reason", "")}
+            return _normalize(
+                data.get("next") or data.get("agent"),
+                data.get("skill"),
+                data.get("reason", ""),
+            )
         except (json.JSONDecodeError, AttributeError):
             logger.warning("supervisor returned unparseable decision: %r", raw)
     return {"next": RESPOND, "skill": None, "reason": "supervisor fallback"}
+
+
+def _content_text(message: Any) -> str:
+    """Best-effort string body of a chat message (or anything), for regex parsing."""
+    content = getattr(message, "content", message)
+    return content if isinstance(content, str) else str(content)
 
 
 def _artifact_text(artifact: dict[str, Any]) -> str:
@@ -113,8 +154,13 @@ def _artifact_text(artifact: dict[str, Any]) -> str:
 
 
 def _supervisor_context(state: GraphState) -> str:
-    """The supervisor's view each pass: the request + what specialists produced."""
-    parts = [f"User request:\n{last_human_text(state)}"]
+    """The supervisor's view each pass: the request + what specialists produced.
+
+    Image data URIs are redacted to a placeholder: the router only needs to know an
+    image is present (it routes to `vision` on that signal), not carry the raw blob.
+    The full data URI still reaches the vision agent via `_build_skill_input`.
+    """
+    parts = [f"User request:\n{redact_images(last_human_text(state))}"]
     artifacts = state.get("artifacts") or []
     if artifacts:
         lines = [
@@ -140,11 +186,23 @@ def _mode_hint(mode: str) -> str:
 
 
 def _build_skill_input(
-    agent: str, skill: str | None, text: str, hist: list[dict[str, str]]
+    agent: str, skill: str | None, text: str, artifacts: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    # Skills are defined as SKILL.md prompts that interpret the raw turn text, so
-    # the supervisor just forwards it. The chosen skill is sent as A2A metadata.
-    return {"text": text}
+    # Skills are defined as SKILL.md prompts that interpret the raw turn text. The
+    # chosen skill is sent as A2A metadata; here we build the `text` the agent reads.
+    #
+    # First hop (nothing produced yet): forward the turn text verbatim. This keeps
+    # any inline image data URI intact so the vision agent receives the real blob.
+    if not artifacts:
+        return {"text": text}
+
+    # Subsequent hops: forward the turn text + what specialists produced so far.
+    parts = [f"User request:\n{redact_images(text)}", "Output from prior steps:"]
+    for a in artifacts:
+        parts.append(
+            f"[{a.get('agent', '?')} / {a.get('skill')}]\n{_artifact_text(a)}"
+        )
+    return {"text": "\n\n".join(parts)}
 
 
 class SupervisorNode:
@@ -157,6 +215,36 @@ class SupervisorNode:
     def __init__(self, model: BaseChatModel, directory: AgentDirectory) -> None:
         self._model = model
         self._directory = directory
+        self._structured: Runnable | None = None
+        try:
+            self._structured = model.with_structured_output(
+                RouterDecision, method="json_schema", include_raw=True
+            )
+        except Exception:  # NotImplementedError / ValueError / AttributeError, etc.
+            logger.debug("router model lacks structured output; using text parsing")
+
+    async def _decide(self, messages: list) -> dict[str, Any]:
+        """Ask the router for the next step, preferring structured output.
+
+        Returns a normalized `{next, skill, reason}` dict. The structured path
+        (Pydantic `RouterDecision`) is tried first; if it is unavailable or the
+        provider replied off-schema, we regex-scrape the raw text as a fallback.
+        """
+        if self._structured is not None:
+            try:
+                result = await self._structured.ainvoke(messages)
+            except Exception:
+                logger.warning("structured routing call failed; retrying as text",
+                               exc_info=True)
+            else:
+                parsed = result.get("parsed")
+                if isinstance(parsed, RouterDecision):
+                    return _normalize(parsed.next, parsed.skill, parsed.reason)
+                # Provider ignored the schema — scrape the raw message instead.
+                return _parse_decision(_content_text(result.get("raw")))
+
+        response = await self._model.ainvoke(messages)
+        return _parse_decision(_content_text(response))
 
     async def __call__(self, state: GraphState) -> dict:
         writer = stream_writer()
@@ -174,16 +262,15 @@ class SupervisorNode:
         elif step_count >= STEP_CAP:
             decision = {"next": RESPOND, "skill": None, "reason": "step cap reached"}
         else:
-            response = await self._model.ainvoke([
+            decision = await self._decide([
                 SystemMessage(content=SUPERVISOR_PROMPT),
                 SystemMessage(content=_mode_hint(mode)),
                 HumanMessage(content=_supervisor_context(state)),
             ])
-            raw = response.content if isinstance(response.content, str) else str(response.content)
-            decision = _parse_decision(raw)
 
         decision["input"] = _build_skill_input(
-            decision["next"], decision["skill"], last_human_text(state), history(state)
+            decision["next"], decision["skill"], last_human_text(state),
+            state.get("artifacts") or [],
         )
 
         writer(AgentStepEvent(run_id=run_id, data={
