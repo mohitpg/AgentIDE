@@ -3,25 +3,23 @@ import { useEffect, useRef, useState } from 'react'
 import type { UseChat } from '../hooks/useChat'
 import { getTask, uploadDocumentAsync } from '../lib/api'
 import { fileToDataUri, withImages, type Attachment } from '../lib/images'
-import type { ChatMode, Task } from '../types'
+import type { Task } from '../types'
 import { TASK_TERMINAL } from '../types'
+import Dropdown from './Dropdown'
 import MessageContent from './MessageContent'
+import Toggle from './Toggle'
 
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp'
 const DOC_ACCEPT =
   '.txt,.md,.markdown,.pdf,.py,.js,.ts,.tsx,.json,.csv,.rst,.html,text/*,application/pdf'
 
-// Composer execution-mode toggle. Persisted so the choice survives reloads.
-const MODE_KEY = 'agentide.chatMode'
-const MODES: { value: ChatMode; label: string; title: string }[] = [
-  { value: 'auto', label: 'Auto', title: 'Supervisor decides when to use specialists' },
-  { value: 'agent', label: 'Agent', title: 'Prefer multi-agent specialists' },
-  { value: 'chat', label: 'Chat', title: 'Plain chat — never delegates' },
-]
+// Composer "thinking" mode. On → multi-agent ("agent"); off → plain chat for a
+// fast response (no "auto"). Persisted so the choice survives reloads.
+const THINKING_KEY = 'agentide.thinking'
 
-function loadMode(): ChatMode {
-  const saved = localStorage.getItem(MODE_KEY)
-  return saved === 'agent' || saved === 'chat' ? saved : 'auto'
+function loadThinking(): boolean {
+  // Default on (agent mode); only an explicit opt-out disables it.
+  return localStorage.getItem(THINKING_KEY) !== '0'
 }
 
 interface Props {
@@ -55,41 +53,28 @@ async function pollTask(id: string, onTick: (t: Task) => void): Promise<Task> {
 export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: Props): JSX.Element {
   const { messages, status, connected, send } = chat
   const [input, setInput] = useState('')
-  const [mode, setMode] = useState<ChatMode>(loadMode)
+  const [thinking, setThinking] = useState<boolean>(loadThinking)
   const [upload, setUpload] = useState<UploadState>({ kind: 'idle' })
   // Images attached to the next message (sent inline to the vision agent).
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  // The composer "+" attach menu (dropup) open state.
-  const [menuOpen, setMenuOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
-  const attachWrapRef = useRef<HTMLDivElement>(null)
 
-  // Persist the mode choice across reloads.
+  // Persist the thinking choice across reloads.
   useEffect(() => {
-    localStorage.setItem(MODE_KEY, mode)
-  }, [mode])
+    localStorage.setItem(THINKING_KEY, thinking ? '1' : '0')
+  }, [thinking])
 
   // Keep the latest message in view as tokens stream in.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
 
-  // Close the attach menu on an outside click.
-  useEffect(() => {
-    if (!menuOpen) return
-    const onDown = (e: MouseEvent): void => {
-      if (!attachWrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [menuOpen])
-
   const submit = (): void => {
     // An image alone (no typed prompt) is a valid vision request.
     if (!input.trim() && attachments.length === 0) return
-    send(withImages(input, attachments), mode)
+    send(withImages(input, attachments), thinking ? 'agent' : 'chat')
     setInput('')
     setAttachments([])
   }
@@ -216,20 +201,6 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
           style={{ display: 'none' }}
           onChange={onImageSelected}
         />
-        <div className="mode-toggle" role="group" aria-label="Chat mode">
-          {MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              className={`mode-option ${mode === m.value ? 'active' : ''}`}
-              title={m.title}
-              aria-pressed={mode === m.value}
-              onClick={() => setMode(m.value)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
         {attachments.length > 0 && (
           <div className="attachments">
             {attachments.map((a, i) => (
@@ -249,33 +220,73 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
           </div>
         )}
         <div className="composer-inner">
-          <div className="attach" ref={attachWrapRef}>
-            <button
-              type="button"
-              className="composer-upload"
-              onClick={() => setMenuOpen((o) => !o)}
-              disabled={uploading}
-              title="Attach an image or document"
-              aria-label="Attach"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-            >
-              {uploading ? (
-                '…'
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          <Dropdown
+            className="thinking-dropdown"
+            menuClassName="thinking-menu"
+            menuRole="dialog"
+            menuLabel="Response mode"
+            trigger={({ open, toggle }) => (
+              <button
+                type="button"
+                className={`thinking-chip${thinking ? ' on' : ''}`}
+                onClick={toggle}
+                title="Response mode — thinking (multi-agent) or fast chat"
+                aria-haspopup="dialog"
+                aria-expanded={open}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
                 </svg>
-              )}
-            </button>
-            {menuOpen && (
-              <div className="attach-menu" role="menu">
+                <span className="thinking-chip-label">{thinking ? 'Thinking' : 'Fast'}</span>
+              </button>
+            )}
+          >
+            <div className="thinking-row">
+              <div className="thinking-row-text">
+                <span className="thinking-row-title">Thinking</span>
+                <span className="thinking-row-hint">
+                  {thinking
+                    ? 'Multi-agent — uses specialists'
+                    : 'Plain chat — fast response'}
+                </span>
+              </div>
+              <Toggle checked={thinking} onChange={setThinking} label="Toggle thinking mode" />
+            </div>
+          </Dropdown>
+          <Dropdown
+            className="attach"
+            menuClassName="attach-menu"
+            menuLabel="Attach"
+            trigger={({ open, toggle }) => (
+              <button
+                type="button"
+                className="composer-upload"
+                onClick={toggle}
+                disabled={uploading}
+                title="Attach an image or document"
+                aria-label="Attach"
+                aria-haspopup="menu"
+                aria-expanded={open}
+              >
+                {uploading ? (
+                  '…'
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  </svg>
+                )}
+              </button>
+            )}
+          >
+            {({ close }) => (
+              <>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false)
+                    close()
                     imageRef.current?.click()
                   }}
                 >
@@ -286,16 +297,16 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setMenuOpen(false)
+                    close()
                     docRef.current?.click()
                   }}
                 >
                   Upload document
                   <span className="attach-menu-hint">index into the knowledge base (RAG)</span>
                 </button>
-              </div>
+              </>
             )}
-          </div>
+          </Dropdown>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
