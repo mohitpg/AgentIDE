@@ -8,7 +8,6 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from orchestrator.directory import AgentDirectory
-from orchestrator.nodes.base import redact_images
 from orchestrator.state import GraphState
 from orchestrator.supervisor import STEP_CAP, _parse_decision, build_supervisor_graph
 
@@ -92,6 +91,9 @@ def _build(router, general, client, *, directory=None):
 
 
 _CFG = {"configurable": {"thread_id": "t"}}
+
+# A stored-image reference token, as minted by the gateway's POST /images.
+_REF = "<Image at db.images.123e4567-e89b-12d3-a456-426614174000>"
 
 
 # ── decision parsing ──────────────────────────────────────────────────────────
@@ -186,7 +188,6 @@ async def test_downstream_agent_receives_upstream_output():
     Regression: `_build_skill_input` used to forward only the original user message
     to every hop, so a downstream agent was blind to upstream artifacts.
     """
-    uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
     client = MultiA2AClient(
         {"analyze-image": "def f():\n    return 1", "edit": "def f():\n    return 2"}
     )
@@ -200,15 +201,14 @@ async def test_downstream_agent_receives_upstream_output():
         client,
     )
 
-    await graph.ainvoke(_state(f"refactor this {uri}"), _CFG)
+    await graph.ainvoke(_state(f"refactor this {_REF}"), _CFG)
 
     vision_payload = client.calls[0][2]["text"]
     code_payload = client.calls[1][2]["text"]
-    # vision (first hop) gets the raw data URI verbatim...
-    assert uri in vision_payload
-    # ...but the code agent sees vision's extracted code, with the blob redacted.
+    # vision (first hop) gets the image reference verbatim...
+    assert _REF in vision_payload
+    # ...and the code agent sees vision's extracted code (the upstream artifact).
     assert "def f():\n    return 1" in code_payload
-    assert uri not in code_payload
 
 
 @pytest.mark.asyncio
@@ -263,21 +263,13 @@ async def test_delegate_degrades_when_agent_unavailable_and_still_finishes():
     assert "unavailable" in result["messages"][-1].content
 
 
-# ── inline image data URIs ──────────────────────────────────────────────────
-
-
-def test_redact_images_replaces_data_uri_with_placeholder():
-    uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
-    out = redact_images(f"what is this {uri} thing")
-    assert uri not in out
-    assert "[image attached]" in out
+# ── stored-image references ─────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_image_data_uri_redacted_for_router_but_forwarded_to_vision():
-    """The router sees a placeholder (not the multi-KB blob); the vision agent
-    still receives the full data URI in its A2A payload."""
-    uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
+async def test_image_ref_forwarded_to_vision():
+    """The image reference is compact, so it passes through to the router as-is
+    and reaches the vision agent verbatim in its A2A payload (no redaction)."""
     router = _RecordingRouter(
         '{"next": "vision", "skill": "analyze-image"}',
         '{"next": "respond"}',
@@ -285,13 +277,12 @@ async def test_image_data_uri_redacted_for_router_but_forwarded_to_vision():
     client = MultiA2AClient({"analyze-image": "a screenshot of code"})
     graph = _build(router, _general("Here's what the image shows."), client)
 
-    await graph.ainvoke(_state(f"explain this {uri}"), _CFG)
+    await graph.ainvoke(_state(f"explain this {_REF}"), _CFG)
 
-    # Router prompt was redacted...
-    assert uri not in router.seen[0]
-    assert "[image attached]" in router.seen[0]
-    # ...but the delegate forwarded the original data URI to the vision agent.
-    assert uri in client.calls[0][2]["text"]
+    # The router sees the reference (its signal to route to vision)...
+    assert _REF in router.seen[0]
+    # ...and the delegate forwards it to the vision agent, which resolves it.
+    assert _REF in client.calls[0][2]["text"]
 
 
 @pytest.mark.asyncio

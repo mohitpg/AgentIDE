@@ -400,6 +400,15 @@
 }
 .attachment-thumb { width: 26px; height: 26px; object-fit: cover; border-radius: 4px; }
 .attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Upload state: a small icon confirms the image landed (✓), is in flight (…),
+   or failed (⚠), so the chip doubles as the "uploaded" confirmation box. */
+.attachment-status { font-size: 0.72rem; line-height: 1; }
+.attachment-chip.uploading { opacity: 0.7; }
+.attachment-chip.uploading .attachment-status { color: #9ca3af; }
+.attachment-chip.done { border-color: #16633a; }
+.attachment-chip.done .attachment-status { color: #34d399; }
+.attachment-chip.error { border-color: #7f1d1d; }
+.attachment-chip.error .attachment-status { color: #ef4444; }
 .attachment-remove {
   border: none;
   background: transparent !important;
@@ -897,6 +906,12 @@
 
 /* ── Inline citations in answers (Phase 4) ───────────────────────────────────── */
 .message-text { white-space: pre-wrap; }
+
+/* Markdown body: opt out of the bubble's pre-wrap so block layout renders normally.
+   Element styling (headings, code, lists, tables) comes from the typography CSS. */
+.message-md { white-space: normal; }
+.message-md :first-child { margin-top: 0; }
+.message-md :last-child { margin-bottom: 0; }
 
 .citation-ref {
   display: inline-flex;

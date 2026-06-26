@@ -2,22 +2,24 @@
 Vision agent — multimodal image analysis, OCR, and diagram→code.
 
 Like the RAG agent (and unlike the LLM-only Code/Summarizer agents), this agent
-overrides `run`: it accepts an image embedded in the turn text (a data URI, an
-http(s) image URL, or a local image path), builds a multimodal message, and
-streams a vision-capable model's response. Three skills:
+overrides `run`: it accepts an image referenced in the turn text — either a stored
+reference ``<Image at db.images.{id}>`` (minted by the gateway's ``POST /images``
+when the user attaches an image, resolved here via ``GET /images/{id}``) or a
+direct source (a data URI, an http(s) image URL, or a local image path) — builds a
+multimodal message, and streams a vision-capable model's response. Three skills:
 
   analyze-image    — describe / analyse what the image shows.
   ocr              — transcribe the text in the image verbatim.
   diagram-to-code  — turn a diagram / mockup / screenshot into code.
 
 It is an independent A2A service. It defaults to a multimodal model (distinct from
-the stack's text default) via ``OPENROUTER_VISION_MODEL``; heavy / batch jobs run
-off the request path on the Celery ``vision`` queue (``workers.tasks.vision``).
+the stack's text default) via ``OPENROUTER_VISION_MODEL``.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,10 +28,21 @@ from agent_common.config import get_agent_settings
 from agent_common.llm import LLMConfig, build_chat_model
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 
-from agent_vision.images import build_multimodal_content, extract_image_sources
+from agent_vision.images import (
+    build_multimodal_content,
+    bytes_to_data_uri,
+    extract_image_refs,
+    extract_image_sources,
+)
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+
+logger = logging.getLogger(__name__)
+
+# Resolves a stored-image reference id to (bytes, mime). Injectable for tests;
+# the default fetches the bytes from the gateway's GET /images/{id}.
+ImageFetcher = Callable[[str], Awaitable[tuple[bytes, str]]]
 
 _SKILLS_DIR = Path(__file__).parent / "skills"
 
@@ -72,22 +85,59 @@ class VisionAgent(BaseAgent):
     name = "Vision"
     description = "Analyzes images: visual analysis, OCR, and diagram-to-code."
 
-    def __init__(self, *, chat_model: BaseChatModel | None = None, **kwargs: object) -> None:
+    def __init__(
+        self,
+        *,
+        chat_model: BaseChatModel | None = None,
+        image_fetcher: ImageFetcher | None = None,
+        **kwargs: object,
+    ) -> None:
         kwargs.setdefault("url", "http://localhost:8104")
         # Default to a multimodal model unless the caller injected an explicit config.
         if "llm_config" not in kwargs:
             kwargs["llm_config"] = vision_llm_config()
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._chat_model = chat_model
+        self._image_fetcher = image_fetcher
 
     @property
     def skills_dir(self) -> Path:
         return _SKILLS_DIR
 
+    async def _fetch_image(self, image_id: str) -> tuple[bytes, str]:
+        """Resolve a stored-image reference to (bytes, mime) via the gateway."""
+        if self._image_fetcher is not None:
+            return await self._image_fetcher(image_id)
+        import httpx
+
+        base = get_agent_settings().gateway_url.rstrip("/")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{base}/images/{image_id}")
+            resp.raise_for_status()
+            mime = resp.headers.get("content-type", "image/png").split(";")[0].strip()
+            return resp.content, mime or "image/png"
+
+    async def _resolve_refs(self, ids: list[str]) -> list[str]:
+        """Turn stored-image reference ids into inline data URIs (best-effort)."""
+        resolved: list[str] = []
+        for image_id in ids:
+            try:
+                data, mime = await self._fetch_image(image_id)
+                resolved.append(bytes_to_data_uri(data, mime))
+            except Exception:  # a missing/unreachable image shouldn't abort the turn
+                logger.warning("vision: failed to resolve image ref %s", image_id,
+                               exc_info=True)
+        return resolved
+
     async def run(
         self, skill_id: str, user_input: str, *, run_id: str = ""
     ) -> AsyncIterator[str]:
+        # Two image sources reach the agent: direct (data URI / URL / local path,
+        # legacy + typed inputs) and stored-image references the gateway minted for
+        # attachments. Resolve both for the *current* turn's text only.
         images, text = extract_image_sources(user_input)
+        ref_ids, text = extract_image_refs(text)
+        images = [*images, *await self._resolve_refs(ref_ids)]
         if not images:
             yield _NO_IMAGE
             return

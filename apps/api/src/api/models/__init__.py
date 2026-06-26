@@ -5,6 +5,7 @@ Add new model imports as you create them.
 
 from api.models.agent import AgentRegistration
 from api.models.conversation import Conversation
+from api.models.image import Image
 from api.models.mcp import MCPServer
 from api.models.message import Message
 from api.models.task import Task
@@ -13,6 +14,7 @@ from api.models.user import User
 __all__ = [
     "AgentRegistration",
     "Conversation",
+    "Image",
     "MCPServer",
     "Message",
     "Task",

@@ -7,7 +7,9 @@ row-level scoping by `user_id` (the column already exists).
 
 from __future__ import annotations
 
+import contextlib
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -16,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from api.db.session import get_db
 from api.models.conversation import Conversation
+from api.models.image import Image
 from api.schemas.chat import SessionDetail, SessionRead
 
 router = APIRouter()
@@ -53,6 +56,16 @@ async def delete_session(
     conversation = await db.get(Conversation, session_id)
     if conversation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+
+    # Sweep this session's staged image files before the rows cascade away (the
+    # `images.session_id` FK is ON DELETE CASCADE, so the rows go with the row).
+    paths = await db.execute(
+        select(Image.path).where(Image.session_id == session_id)
+    )
+    for (path,) in paths.all():
+        with contextlib.suppress(OSError):
+            Path(path).unlink()
+
     await db.delete(conversation)
     # Commit here (like the other write routes) so the row is gone before the
     # 204 returns; otherwise get_db's deferred commit races the client's refresh,

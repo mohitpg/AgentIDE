@@ -37,7 +37,6 @@ celery_client.conf.update(
     task_queues=(
         Queue("default", _exchange, routing_key="default"),
         Queue("indexing", _exchange, routing_key="indexing"),
-        Queue("vision", _exchange, routing_key="vision"),
         Queue("web", _exchange, routing_key="web"),
     ),
     task_default_queue="default",

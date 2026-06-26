@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from schemas.events import AgentStepEvent
 
 from orchestrator.directory import AgentDirectory
-from orchestrator.nodes.base import last_human_text, redact_images, stream_writer
+from orchestrator.nodes.base import last_human_text, stream_writer
 from orchestrator.state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -54,8 +54,9 @@ SUPERVISOR_PROMPT = (
     "knowledge base.\n"
     "- vision: analyze-image (describe/analyse an image), ocr (extract text from "
     "an image), diagram-to-code (turn a diagram/mockup/screenshot into code). Use "
-    "vision whenever the message includes an image (a data URI, an image URL, or a "
-    "local image path) or asks about a screenshot/diagram/photo.\n\n"
+    "vision whenever the message includes an image — an attached-image reference "
+    "like `<Image at db.images.…>`, a data URI, an image URL, or a local image "
+    "path — or asks about a screenshot/diagram/photo.\n\n"
     "Sequencing: some requests need several agents IN ORDER — e.g. an image of "
     "code must be read by `vision` BEFORE `code` can refactor it, and the right "
     "second step is often only knowable once the first has run. Pick the agent "
@@ -155,12 +156,9 @@ def _artifact_text(artifact: dict[str, Any]) -> str:
 
 def _supervisor_context(state: GraphState) -> str:
     """The supervisor's view each pass: the request + what specialists produced.
-
-    Image data URIs are redacted to a placeholder: the router only needs to know an
-    image is present (it routes to `vision` on that signal), not carry the raw blob.
-    The full data URI still reaches the vision agent via `_build_skill_input`.
+    Images reach the agent as a compact `<Image at db.images.…>` reference
     """
-    parts = [f"User request:\n{redact_images(last_human_text(state))}"]
+    parts = [f"User request:\n{last_human_text(state)}"]
     artifacts = state.get("artifacts") or []
     if artifacts:
         lines = [
@@ -192,12 +190,13 @@ def _build_skill_input(
     # chosen skill is sent as A2A metadata; here we build the `text` the agent reads.
     #
     # First hop (nothing produced yet): forward the turn text verbatim. This keeps
-    # any inline image data URI intact so the vision agent receives the real blob.
+    # any `<Image at db.images.…>` reference intact so the vision agent — and only
+    # the vision agent, on the current turn's text — resolves and analyses it.
     if not artifacts:
         return {"text": text}
 
     # Subsequent hops: forward the turn text + what specialists produced so far.
-    parts = [f"User request:\n{redact_images(text)}", "Output from prior steps:"]
+    parts = [f"User request:\n{text}", "Output from prior steps:"]
     for a in artifacts:
         parts.append(
             f"[{a.get('agent', '?')} / {a.get('skill')}]\n{_artifact_text(a)}"

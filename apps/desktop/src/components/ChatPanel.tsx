@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { UseChat } from '../hooks/useChat'
-import { getTask, uploadDocumentAsync } from '../lib/api'
-import { fileToDataUri, withImages, type Attachment } from '../lib/images'
+import { getTask, uploadDocumentAsync, uploadImage } from '../lib/api'
+import { fileToDataUri, withImageRefs, type Attachment } from '../lib/images'
 import type { Task } from '../types'
 import { TASK_TERMINAL } from '../types'
 import Dropdown from './Dropdown'
@@ -20,6 +20,14 @@ const THINKING_KEY = 'agentide.thinking'
 function loadThinking(): boolean {
   // Default on (agent mode); only an explicit opt-out disables it.
   return localStorage.getItem(THINKING_KEY) !== '0'
+}
+
+// A local-only unique id for an attachment chip (React key + in-place update).
+// Not `crypto.randomUUID()` — that needs a secure context the renderer may lack.
+let _attachmentSeq = 0
+function newLocalId(): string {
+  _attachmentSeq += 1
+  return `att-${Date.now()}-${_attachmentSeq}`
 }
 
 interface Props {
@@ -60,21 +68,44 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
   const scrollRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
+  // Whether to keep the view pinned to the bottom as new tokens stream in. Stays
+  // true while the user sits at the bottom; flips off the moment they scroll up,
+  // and back on when they scroll back down. A ref (not state) so updating it
+  // during a scroll event doesn't trigger a re-render.
+  const stickToBottomRef = useRef(true)
 
   // Persist the thinking choice across reloads.
   useEffect(() => {
     localStorage.setItem(THINKING_KEY, thinking ? '1' : '0')
   }, [thinking])
 
-  // Keep the latest message in view as tokens stream in.
+  // Keep the latest message in view as tokens stream in — but only while the user
+  // is parked at the bottom. If they've scrolled up to read, leave them be.
   useEffect(() => {
+    if (!stickToBottomRef.current) return
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages])
+
+  // Track whether the user is at the bottom. Treat "within a few px" as the
+  // bottom so the auto-scroll's own rounding doesn't read as a manual scroll-up.
+  const onScroll = (e: React.UIEvent<HTMLDivElement>): void => {
+    const el = e.currentTarget
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  }
+
+  const uploadingAttachments = attachments.some((a) => a.status === 'uploading')
 
   const submit = (): void => {
     // An image alone (no typed prompt) is a valid vision request.
     if (!input.trim() && attachments.length === 0) return
-    send(withImages(input, attachments), thinking ? 'agent' : 'chat')
+    if (!connected || status === 'streaming') return
+    // Attachments upload the moment they're added; don't send until they settle.
+    if (uploadingAttachments) return
+    if (attachments.some((a) => a.status === 'error')) return // chips show the error
+
+    // Embed each successfully-uploaded image's `<Image at db.images.{id}>` ref.
+    const refs = attachments.flatMap((a) => (a.ref ? [a.ref] : []))
+    send(withImageRefs(input, refs), thinking ? 'agent' : 'chat')
     setInput('')
     setAttachments([])
   }
@@ -86,13 +117,37 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
     }
   }
 
-  // Turn image files (from paste, the file picker, or drop) into inline attachments.
+  // Update one attachment in place once its async upload resolves.
+  const patchAttachment = (localId: string, patch: Partial<Attachment>): void => {
+    setAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, ...patch } : a)))
+  }
+
+  // Turn image files (from paste, the file picker, or drop) into attachments, then
+  // upload each to POST /images immediately so the chip can confirm it landed.
   const addImageFiles = async (files: Iterable<File>): Promise<void> => {
     const imgs = [...files].filter((f) => f.type.startsWith('image/'))
-    const next = await Promise.all(
-      imgs.map(async (f) => ({ dataUri: await fileToDataUri(f), name: f.name || 'pasted-image' })),
+    const next: Attachment[] = await Promise.all(
+      imgs.map(async (f) => ({
+        localId: newLocalId(),
+        file: f,
+        dataUri: await fileToDataUri(f),
+        name: f.name || 'pasted-image',
+        status: 'uploading' as const,
+      })),
     )
-    if (next.length) setAttachments((prev) => [...prev, ...next])
+    if (next.length === 0) return
+    setAttachments((prev) => [...prev, ...next])
+    // Fire the uploads; reflect success (ref) or failure on each chip.
+    for (const a of next) {
+      void uploadImage(a.file, sessionId)
+        .then((res) => patchAttachment(a.localId, { status: 'done', ref: res.ref }))
+        .catch((err) =>
+          patchAttachment(a.localId, {
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Upload failed',
+          }),
+        )
+    }
   }
 
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
@@ -106,13 +161,16 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
   }
 
   const onImageSelected = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const files = e.target.files
+    // Copy the files out FIRST: `e.target.files` is a live FileList, and resetting
+    // `value` (to allow re-selecting the same file) empties it — so reading it
+    // after the reset would yield nothing.
+    const files = e.target.files ? [...e.target.files] : []
     e.target.value = '' // allow re-selecting the same file
-    if (files) void addImageFiles(files)
+    if (files.length) void addImageFiles(files)
   }
 
-  const removeAttachment = (i: number): void => {
-    setAttachments((prev) => prev.filter((_, idx) => idx !== i))
+  const removeAttachment = (localId: string): void => {
+    setAttachments((prev) => prev.filter((a) => a.localId !== localId))
   }
 
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -154,7 +212,7 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
 
   return (
     <section className="chat">
-      <div className="messages" ref={scrollRef}>
+      <div className="messages" ref={scrollRef} onScroll={onScroll}>
         {messages.map((m) => (
           <div key={m.id} className={`message ${m.role}`}>
             <div className="message-role">{m.role}</div>
@@ -203,14 +261,21 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
         />
         {attachments.length > 0 && (
           <div className="attachments">
-            {attachments.map((a, i) => (
-              <span className="attachment-chip" key={i} title={a.name}>
+            {attachments.map((a) => (
+              <span
+                className={`attachment-chip ${a.status}`}
+                key={a.localId}
+                title={a.status === 'error' ? a.error ?? 'Upload failed' : a.name}
+              >
                 <img className="attachment-thumb" src={a.dataUri} alt="" />
                 <span className="attachment-name">{a.name}</span>
+                <span className="attachment-status" aria-hidden>
+                  {a.status === 'uploading' ? '…' : a.status === 'done' ? '✓' : '⚠'}
+                </span>
                 <button
                   type="button"
                   className="attachment-remove"
-                  onClick={() => removeAttachment(i)}
+                  onClick={() => removeAttachment(a.localId)}
                   aria-label={`Remove ${a.name}`}
                 >
                   ×
@@ -317,8 +382,13 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
             disabled={!connected}
           />
           <button
-            onClick={submit}
-            disabled={!connected || status === 'streaming' || (!input.trim() && attachments.length === 0)}
+            onClick={() => submit()}
+            disabled={
+              !connected ||
+              status === 'streaming' ||
+              uploadingAttachments ||
+              (!input.trim() && attachments.length === 0)
+            }
           >
             {status === 'streaming' ? '…' : 'Send'}
           </button>

@@ -1,5 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import 'katex/dist/katex.min.css'
+import '@ai-react-markdown/core/typography/default.css'
 import App from './App.tsx'
 import './index.css'
 

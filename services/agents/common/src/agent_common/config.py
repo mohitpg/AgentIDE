@@ -30,7 +30,7 @@ class AgentSettings(BaseSettings):
     openrouter_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
     # Multimodal model for the Vision agent (Phase 5). Must be vision-capable; the
     # text default above generally is not. Override via OPENROUTER_VISION_MODEL.
-    openrouter_vision_model: str = "nvidia/nemotron-3.5-content-safety:free"
+    openrouter_vision_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.3  # specialists run cooler than the chat default
 

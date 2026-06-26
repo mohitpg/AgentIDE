@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # Empty → <system temp>/agentide_uploads (API + worker share the host).
     rag_upload_dir: str = ""
 
+    # ── Images (chat attachments) ─────────────────────────────────────────────
+    # Attached images are staged here by POST /images and served back by
+    # GET /images/{id} (to the Vision agent and the UI). Empty → <system
+    # temp>/agentide_images. Capped like RAG uploads.
+    image_upload_dir: str = ""
+    image_max_upload_bytes: int = 10_000_000  # 10 MB upload cap
+
     # ── MCP (Phase 6) ─────────────────────────────────────────────────────────
     # Default sandbox root used by the built-in filesystem/git server templates
     # offered at GET /mcp/builtins. Empty → the API process's working directory.

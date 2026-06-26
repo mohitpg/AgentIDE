@@ -12,8 +12,11 @@ from __future__ import annotations
 from langchain_core.messages import AIMessageChunk
 
 from agent_vision.agent import VisionAgent
+from agent_vision.images import bytes_to_data_uri
 
 _IMG = "data:image/png;base64,AAAABBBBCCCC"
+_REF_ID = "123e4567-e89b-12d3-a456-426614174000"
+_REF = f"<Image at db.images.{_REF_ID}>"
 
 
 class FakeChatModel:
@@ -57,6 +60,41 @@ async def test_analyze_streams_text_for_image() -> None:
 async def test_no_image_returns_guidance() -> None:
     agent = VisionAgent(chat_model=FakeChatModel(["unused"]))
     out = await _collect(agent, "analyze-image", "just text, no image attached")
+    assert "didn't find an image" in out
+
+
+async def test_resolves_stored_image_reference() -> None:
+    """A `<Image at db.images.{id}>` reference is fetched and inlined as a data URI,
+    and the reference token is stripped from the prompt text."""
+    raw = b"\x89PNG\r\n\x1a\n fake png bytes"
+    seen: list[str] = []
+
+    async def fake_fetch(image_id: str) -> tuple[bytes, str]:
+        seen.append(image_id)
+        return raw, "image/png"
+
+    model = FakeChatModel(["ok"])
+    agent = VisionAgent(chat_model=model, image_fetcher=fake_fetch)
+    await _collect(agent, "analyze-image", f"what is in {_REF}")
+
+    assert seen == [_REF_ID]  # the agent resolved exactly the current ref
+    blocks = model.last_messages[1].content
+    img = next(b for b in blocks if b.get("type") == "image_url")
+    assert img["image_url"]["url"] == bytes_to_data_uri(raw, "image/png")
+    text_block = next(b for b in blocks if b.get("type") == "text")
+    assert "what is in" in text_block["text"]
+    assert _REF not in text_block["text"]  # reference stripped from the prompt
+
+
+async def test_unresolvable_reference_returns_guidance() -> None:
+    """If the gateway fetch fails, the turn degrades to the no-image guidance
+    rather than aborting."""
+
+    async def boom(image_id: str) -> tuple[bytes, str]:
+        raise RuntimeError("gateway down")
+
+    agent = VisionAgent(chat_model=FakeChatModel(["unused"]), image_fetcher=boom)
+    out = await _collect(agent, "analyze-image", f"describe {_REF}")
     assert "didn't find an image" in out
 
 

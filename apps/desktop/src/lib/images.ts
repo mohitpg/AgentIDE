@@ -1,22 +1,38 @@
 // Inline image handling for the composer and message bubbles.
 //
-// Images ride to the backend embedded in the message text as base64 data URIs —
-// the chat transport carries a single `content` string, and the vision agent
-// pulls the data URIs back out of it (see services/agents/vision images.py).
-// These helpers keep the wire format (text + appended data URIs) and the display
-// format (residual text + thumbnails) in sync on the client.
+// Images no longer ride to the backend as base64 — on Send the composer uploads
+// each attachment to POST /images and embeds the returned `<Image at db.images.
+// {id}>` reference in the message text. The Vision agent resolves that reference
+// (GET /images/{id}); the message bubble renders the same endpoint as a thumbnail.
+// These helpers keep the wire format (text + appended references) and the chip
+// preview (a local data URI, never sent) in sync on the client.
 
-// A base64 image data URI, up to the first whitespace. Mirrors the agent regex.
-const DATA_URI_RE = /data:image\/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g
+// A stored-image reference token. Mirrors the gateway + agent regex.
+const IMAGE_REF_RE = /<Image at db\.images\.([0-9a-fA-F-]{36})>/g
+
+// Where an attachment is in its POST /images lifecycle. Upload now happens the
+// moment a file is attached (not on Send), so the chip can confirm success.
+export type AttachmentStatus = 'uploading' | 'done' | 'error'
 
 export interface Attachment {
-  // The full `data:image/...;base64,...` URI sent to the backend.
+  // Stable client-side id, used as the React key and to update this chip in place
+  // when its async upload resolves.
+  localId: string
+  // The original file, uploaded to POST /images on attach.
+  file: File
+  // A local `data:image/...` URI used only for the composer chip preview.
   dataUri: string
   // Original filename (or a synthesized name for pasted images), for the chip.
   name: string
+  // Upload progress: 'uploading' → 'done' (ref set) or 'error' (error set).
+  status: AttachmentStatus
+  // The `<Image at db.images.{id}>` token, set once the upload succeeds.
+  ref?: string
+  // Failure detail, set when status is 'error'.
+  error?: string
 }
 
-// Read a File/Blob as a base64 data URI.
+// Read a File/Blob as a base64 data URI (for the local chip preview).
 export function fileToDataUri(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -26,17 +42,18 @@ export function fileToDataUri(file: Blob): Promise<string> {
   })
 }
 
-// Build the wire content: typed text followed by each image's data URI. The
-// agent's extractor tolerates any position, but trailing keeps the prompt clean.
-export function withImages(text: string, attachments: Attachment[]): string {
-  if (attachments.length === 0) return text
-  return [text.trim(), ...attachments.map((a) => a.dataUri)].filter(Boolean).join('\n')
+// Build the wire content: typed text followed by each uploaded image's reference.
+// The agent's extractor tolerates any position, but trailing keeps the prompt clean.
+export function withImageRefs(text: string, refs: string[]): string {
+  if (refs.length === 0) return text
+  return [text.trim(), ...refs].filter(Boolean).join('\n')
 }
 
-// Split a message's content back into its images and the residual display text,
-// so a sent/persisted message renders thumbnails instead of a raw base64 blob.
-export function splitImages(content: string): { images: string[]; text: string } {
-  const images = content.match(DATA_URI_RE) ?? []
-  const text = content.replace(DATA_URI_RE, '').replace(/\n{3,}/g, '\n\n').trim()
-  return { images, text }
+// Split a message's content back into its stored-image ids and the residual
+// display text, so a sent/persisted message renders thumbnails (via GET
+// /images/{id}) instead of the raw reference tokens.
+export function splitImageRefs(content: string): { ids: string[]; text: string } {
+  const ids = [...content.matchAll(IMAGE_REF_RE)].map((m) => m[1])
+  const text = content.replace(IMAGE_REF_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+  return { ids, text }
 }

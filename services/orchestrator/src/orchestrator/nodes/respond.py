@@ -13,13 +13,12 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
-    BaseMessage,
     HumanMessage,
     SystemMessage,
 )
 from schemas.events import AgentStepEvent, Channel, DoneEvent, TokenEvent
 
-from orchestrator.nodes.base import redact_images, stream_writer
+from orchestrator.nodes.base import stream_writer
 from orchestrator.state import GraphState
 
 # Appended to the caller-supplied system prompt so synthesis never mangles
@@ -42,15 +41,6 @@ _SYNTHESIS_INSTRUCTION = (
 )
 
 
-def _redact_message(msg: BaseMessage) -> BaseMessage:
-    """Drop inline image data URIs from a text message before LLM synthesis."""
-    if isinstance(msg, HumanMessage) and isinstance(msg.content, str):
-        redacted = redact_images(msg.content)
-        if redacted != msg.content:
-            return HumanMessage(content=redacted)
-    return msg
-
-
 class RespondNode:
     """Composes the final answer; augments the caller's system prompt for synthesis."""
 
@@ -68,10 +58,10 @@ class RespondNode:
         # over history ending on the user turn. When specialists ran, append a
         # human-turn synthesis instruction so the model composes a fresh answer
         # instead of continuing the last specialist's assistant message.
-        # Strip inline image data URIs from the history (the vision agent already
-        # consumed them and recorded its analysis as an artifact); the synthesis
-        # model only needs the text, not the multi-KB blob.
-        messages: list = [self._system, *map(_redact_message, state["messages"])]
+        # History carries only the compact `<Image at db.images.…>` reference (no
+        # blob), so it can be forwarded as-is — the vision agent already resolved
+        # and analysed the image, and its analysis is in the prior messages.
+        messages: list = [self._system, *state["messages"]]
         if state.get("artifacts"):
             messages.append(HumanMessage(content=_SYNTHESIS_INSTRUCTION))
 

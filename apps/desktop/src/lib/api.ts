@@ -102,6 +102,36 @@ export async function listDocuments(): Promise<RagDocument[]> {
   return json(await fetch(`${API_BASE}/rag/documents`))
 }
 
+// ── Images (chat attachments) ─────────────────────────────────────────────────
+export interface ImageUploadResponse {
+  id: string
+  // The `<Image at db.images.{id}>` token to embed in the chat message.
+  ref: string
+  filename: string
+  content_type: string
+}
+
+// Stage an attached image and get back the reference to embed in the message.
+export async function uploadImage(
+  file: File,
+  sessionId?: string | null,
+): Promise<ImageUploadResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  if (sessionId) form.append('session_id', sessionId)
+  const res = await fetch(`${API_BASE}/images`, { method: 'POST', body: form })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<ImageUploadResponse>
+}
+
+// URL that serves a stored image's bytes — used for message-bubble thumbnails.
+export function imageUrl(id: string): string {
+  return `${API_BASE}/images/${id}`
+}
+
 export async function deleteDocument(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/rag/documents/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)

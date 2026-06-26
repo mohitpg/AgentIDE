@@ -7,11 +7,10 @@ Backend : Redis     (fast result store + pub/sub for progress events)
 Queues:
   default   – miscellaneous short tasks
   indexing  – repo / doc ingestion (chunk → embed → upsert)
-  vision    – image analysis / OCR (can be large)
   web       – page fetching and crawling
 
 Run with:
-  celery -A workers.app:celery_app worker --loglevel=info -Q default,indexing,vision,web
+  celery -A workers.app:celery_app worker --loglevel=info -Q default,indexing,web
 
 Scheduled jobs (Celery Beat) run alongside:
   celery -A workers.app:celery_app beat --loglevel=info
@@ -35,7 +34,6 @@ celery_app = Celery(
         "workers.tasks.mock",
         "workers.tasks.maintenance",
         "workers.tasks.indexing",
-        "workers.tasks.vision",
         "workers.tasks.web",
     ],
 )
@@ -46,7 +44,6 @@ default_exchange = Exchange("agentide", type="direct")
 celery_app.conf.task_queues = (
     Queue("default", default_exchange, routing_key="default"),
     Queue("indexing", default_exchange, routing_key="indexing"),
-    Queue("vision", default_exchange, routing_key="vision"),
     Queue("web", default_exchange, routing_key="web"),
 )
 celery_app.conf.task_default_queue = "default"
@@ -56,7 +53,6 @@ celery_app.conf.task_default_routing_key = "default"
 # ── Routing rules ────────────────────────────────────────────────────────────
 celery_app.conf.task_routes = {
     "workers.tasks.indexing.*": {"queue": "indexing"},
-    "workers.tasks.vision.*": {"queue": "vision"},
     "workers.tasks.web.*": {"queue": "web"},
 }
 

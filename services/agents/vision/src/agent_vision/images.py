@@ -25,6 +25,9 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 # A base64 data URI for an image, up to the first whitespace.
 _DATA_URI_RE = re.compile(r"data:image/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+")
+# A stored-image reference minted by the gateway's POST /images. The {id} resolves
+# to the staged bytes via GET /images/{id} (see agent.run).
+_IMAGE_REF_RE = re.compile(r"<Image at db\.images\.([0-9a-fA-F-]{36})>")
 # An http(s) URL whose path ends in a known image extension (optional query string).
 _HTTP_IMG_RE = re.compile(
     r"https?://\S+?\.(?:png|jpe?g|gif|webp|bmp)(?:\?\S*)?",
@@ -73,6 +76,19 @@ def extract_image_sources(text: str) -> tuple[list[str], str]:
             remaining.append(token)
 
     return sources, " ".join(remaining).strip()
+
+
+def extract_image_refs(text: str) -> tuple[list[str], str]:
+    """Split ``text`` into (stored-image reference ids, residual prompt text).
+
+    The reference token ``<Image at db.images.{id}>`` is minted by the gateway when
+    an attached image is uploaded on Send; the id resolves to bytes via
+    ``GET /images/{id}``. This pulls the ids out (in order) and returns the residual
+    text, whitespace-normalised, to use as the prompt.
+    """
+    ids = _IMAGE_REF_RE.findall(text)
+    residual = _IMAGE_REF_RE.sub(" ", text)
+    return ids, " ".join(residual.split()).strip()
 
 
 def build_multimodal_content(prompt: str, images: list[str]) -> list[str | dict[Any, Any]]:

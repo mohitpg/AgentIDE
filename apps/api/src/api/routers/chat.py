@@ -29,8 +29,10 @@ from api.schemas.chat import ChatRequest
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Inline base64 image data URI — stripped when deriving a session title.
-_DATA_URI_RE = re.compile(r"data:image/[A-Za-z0-9.+-]+;base64,[A-Za-z0-9+/=]+")
+# Stored-image reference token — stripped when deriving a session title so the
+# title isn't a raw `<Image at db.images.…>` reference (an image-only turn falls
+# back to a generic label).
+_IMAGE_REF_RE = re.compile(r"<Image at db\.images\.[0-9a-fA-F-]{36}>")
 
 
 async def _send_error(ws: WebSocket, run_id: str, code: str, message: str) -> None:
@@ -73,11 +75,11 @@ async def chat_ws(websocket: WebSocket) -> None:
                         content=req.content,
                     )
                 )
-                # Derive a title from the first message. Strip any inline image
-                # data URIs first so the title isn't a base64 blob (an image-only
-                # turn falls back to a generic label).
+                # Derive a title from the first message. Strip any stored-image
+                # reference tokens first (an image-only turn falls back to a
+                # generic label).
                 if not conversation.title:
-                    title = _DATA_URI_RE.sub("", req.content).strip()
+                    title = _IMAGE_REF_RE.sub("", req.content).strip()
                     conversation.title = title[:60] or "Image"
                 user_id = str(conversation.user_id) if conversation.user_id else ""
                 await db.commit()
