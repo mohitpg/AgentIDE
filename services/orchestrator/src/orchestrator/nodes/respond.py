@@ -18,7 +18,7 @@ from langchain_core.messages import (
 )
 from schemas.events import AgentStepEvent, Channel, DoneEvent, TokenEvent
 
-from orchestrator.nodes.base import stream_writer
+from orchestrator.nodes.base import split_turn, stream_writer
 from orchestrator.state import GraphState
 
 # Appended to the caller-supplied system prompt so synthesis never mangles
@@ -54,15 +54,17 @@ class RespondNode:
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": "assistant", "node": "respond", "phase": "enter"}))
 
-        # Fast path (no specialist) keeps the old conversational behaviour: stream
-        # over history ending on the user turn. When specialists ran, append a
-        # human-turn synthesis instruction so the model composes a fresh answer
-        # instead of continuing the last specialist's assistant message.
-        # History carries only the compact `<Image at db.images.…>` reference (no
-        # blob), so it can be forwarded as-is — the vision agent already resolved
-        # and analysed the image, and its analysis is in the prior messages.
+        # Fast path (no specialist this turn) keeps the old conversational
+        # behaviour: stream over history ending on the user turn. When specialists
+        # ran this turn, append a human-turn synthesis instruction so the model
+        # composes a fresh answer instead of continuing the last specialist's
+        # assistant message. History carries only the compact `<Image at
+        # db.images.…>` reference (no blob), so it can be forwarded as-is — the
+        # vision agent already resolved and analysed the image, and its analysis is
+        # in the prior messages.
+        _, _, this_turn_steps = split_turn(state)
         messages: list = [self._system, *state["messages"]]
-        if state.get("artifacts"):
+        if this_turn_steps:
             messages.append(HumanMessage(content=_SYNTHESIS_INSTRUCTION))
 
         text, index = "", 0
@@ -76,7 +78,6 @@ class RespondNode:
                 writer(TokenEvent(run_id=run_id, data={
                     "content": piece, "index": index, "channel": Channel.FINAL}))
                 index += 1
-        print("respondnode->",text)
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": "assistant", "node": "respond", "phase": "exit"}))
         writer(DoneEvent(run_id=run_id, data={"agent": "assistant"}))

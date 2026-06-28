@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 
 class GraphState(TypedDict):
-    # Conversation history (messages accumulate via add_messages reducer)
+    
     messages: Annotated[list[BaseMessage], add_messages]
 
     # Which specialist agent was last routed to
@@ -34,12 +34,6 @@ class GraphState(TypedDict):
 
     # Retrieved RAG context (populated by RAG node)
     rag_context: list[dict[str, Any]]
-
-    # Structured artifacts produced by agents this turn (code, summaries, images).
-    # Per-turn scoped: `delegate_node` accumulates into it (no reducer — it rewrites
-    # the full list), and the runtime reseeds it to [] at the start of each turn so
-    # the supervisor only sees the current turn's steps.
-    artifacts: list[dict[str, Any]]
 
     # Human-in-the-loop interrupt payload (Phase 7)
     pending_approval: dict[str, Any] | None

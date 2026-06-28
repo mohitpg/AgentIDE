@@ -140,10 +140,12 @@ class Orchestrator:
     ) -> AsyncIterator[object]:
         """
         Run one chat turn through the supervisor loop. `session_id` is the
-        checkpointer thread, so prior turns are restored automatically — we only
-        feed the new user message. `mode` ("auto"|"agent"|"chat") biases the
-        supervisor and is reseeded each turn (it has no reducer, so the seeded
-        value overrides any value left in the checkpoint).
+        checkpointer thread, so prior turns are restored automatically (via the
+        `messages` channel's `add_messages` reducer) — we only feed the new user
+        message, which the reducer appends to that restored history. `mode`
+        ("auto"|"agent"|"chat") and `step_count` are per-turn scalars with no
+        reducer, so the values seeded here overwrite whatever the checkpoint
+        restored, scoping them to this turn.
 
         Forwards the supervisor's StreamEvents (agent_step / token / done / error)
         as they are emitted, stamping `duration_ms` onto the terminal `done`.
@@ -163,14 +165,16 @@ class Orchestrator:
             "recursion_limit": 2 * STEP_CAP + 4,
         }
         graph_input = {
+            # add_messages appends this to the checkpoint-restored history, so the
+            # whole conversation stays in one place (the single source of truth).
             "messages": [HumanMessage(content=content)],
             "run_id": run_id,
             "session_id": session_id,
             "user_id": user_id,
-            # Reset the per-turn loop state (no reducers ⇒ these overwrite whatever
-            # the checkpoint restored, scoping them to this turn).
+            # Per-turn loop scalars (no reducer ⇒ these overwrite the restored
+            # checkpoint values, scoping them to this turn). Specialist outputs are
+            # no longer tracked in a separate buffer — they live in `messages`.
             "step_count": 0,
-            "artifacts": [],
             "mode": mode,
         }
 

@@ -1,10 +1,11 @@
 """
 The supervisor node — the recurrent decision-maker of the graph.
 
-Called once per loop pass, it reads the original request **plus** everything
-specialists have produced so far (accumulated `artifacts` + message history) and
-decides the next step: delegate to a specialist agent, or `respond`. `mode ==
-"chat"` and hitting `STEP_CAP` both short-circuit to `respond` with no LLM call.
+Called once per loop pass, it reads the conversation so far **plus** everything
+specialists have produced this turn — all from the single `messages` channel via
+`split_turn` — and decides the next step: delegate to a specialist agent, or
+`respond`. `mode == "chat"` and hitting `STEP_CAP` both short-circuit to
+`respond` with no LLM call.
 
 The class also owns `pick`, the conditional-edge function used to route out of
 the node, since that decision is part of the supervisor's job.
@@ -18,13 +19,13 @@ import re
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 from schemas.events import AgentStepEvent
 
 from orchestrator.directory import AgentDirectory
-from orchestrator.nodes.base import last_human_text, stream_writer
+from orchestrator.nodes.base import content_text, split_turn, stream_writer
 from orchestrator.state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -39,10 +40,12 @@ RESPOND = "respond"
 
 SUPERVISOR_PROMPT = (
     "You are the supervisor for AgentIDE, an agentic coding assistant. You run in "
-    "a LOOP: you are called repeatedly, and on each pass you see the user's "
-    "request plus the outputs of any specialist agents that have already run this "
-    "turn. Choose the SINGLE next step that makes progress, then stop — you will "
-    "be called again with that step's result.\n\n"
+    "a LOOP: you are called repeatedly, and on each pass you see the conversation "
+    "so far (previous turns), the user's current request, plus the outputs of any "
+    "specialist agents that have already run THIS turn. Resolve references to "
+    "earlier turns (\"it\", \"that\", \"the same file\") against the conversation. "
+    "Choose the SINGLE next step that makes progress, then stop — you will be "
+    "called again with that step's result.\n\n"
     "Specialist agents and their skills:\n"
     "- code: generate (write new code from a spec), edit (modify given code), "
     "explain (explain a snippet)\n"
@@ -136,38 +139,47 @@ def _parse_decision(raw: str) -> dict[str, Any]:
     return {"next": RESPOND, "skill": None, "reason": "supervisor fallback"}
 
 
-def _content_text(message: Any) -> str:
-    """Best-effort string body of a chat message (or anything), for regex parsing."""
-    content = getattr(message, "content", message)
-    return content if isinstance(content, str) else str(content)
+def _step_label(message: BaseMessage) -> str:
+    """A this-turn specialist output, labelled by the agent (and skill) that ran.
+
+    `delegate_node` tags each output `AIMessage` with `name=<agent>` and a `skill`
+    in `additional_kwargs`, so the supervisor can see who produced what without a
+    separate artifacts buffer.
+    """
+    agent = getattr(message, "name", None) or "?"
+    skill = (getattr(message, "additional_kwargs", None) or {}).get("skill")
+    return f"- {agent} ({skill}): {content_text(message)}"
 
 
-def _artifact_text(artifact: dict[str, Any]) -> str:
-    """Best-effort body of a recorded artifact, across the agents' result shapes."""
-    result = artifact.get("result") or {}
-    return (
-        result.get("text")
-        or result.get("summary")
-        or result.get("output")
-        or result.get("explanation")
-        or ""
-    )
+def _render_history(messages: list[BaseMessage]) -> str:
+    """Render prior turns as a plain transcript for cross-turn context."""
+    lines = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            lines.append(f"user: {content_text(msg)}")
+        else:  # AIMessage — name set for raw specialist output, absent for answers
+            who = getattr(msg, "name", None)
+            tag = f"assistant ({who})" if who else "assistant"
+            lines.append(f"{tag}: {content_text(msg)}")
+    return "\n".join(lines)
 
 
 def _supervisor_context(state: GraphState) -> str:
-    """The supervisor's view each pass: the request + what specialists produced.
-    Images reach the agent as a compact `<Image at db.images.…>` reference
+    """The supervisor's view each pass, all sliced from the `messages` channel:
+    the conversation so far + the current request + this-turn specialist outputs.
+    Images reach the agent as a compact `<Image at db.images.…>` reference.
     """
-    parts = [f"User request:\n{last_human_text(state)}"]
-    artifacts = state.get("artifacts") or []
-    if artifacts:
-        lines = [
-            f"- {a.get('agent', '?')} ({a.get('skill')}): {_artifact_text(a)}"
-            for a in artifacts
-        ]
-        parts.append("Steps completed so far:\n" + "\n".join(lines))
+    prior, current, steps = split_turn(state)
+    parts: list[str] = []
+    if prior:
+        parts.append("Conversation so far:\n" + _render_history(prior))
+    parts.append(f"Current user request:\n{current}")
+    if steps:
+        parts.append(
+            "Steps completed this turn:\n" + "\n".join(_step_label(m) for m in steps)
+        )
     else:
-        parts.append("No specialist has run yet.")
+        parts.append("No specialist has run yet this turn.")
     return "\n\n".join(parts)
 
 
@@ -183,23 +195,28 @@ def _mode_hint(mode: str) -> str:
     )
 
 
-def _build_skill_input(
-    agent: str, skill: str | None, text: str, artifacts: list[dict[str, Any]]
-) -> dict[str, Any]:
+def _build_skill_input(state: GraphState) -> dict[str, Any]:
     # Skills are defined as SKILL.md prompts that interpret the raw turn text. The
     # chosen skill is sent as A2A metadata; here we build the `text` the agent reads.
     #
-    # First hop (nothing produced yet): forward the turn text verbatim. This keeps
-    # any `<Image at db.images.…>` reference intact so the vision agent — and only
-    # the vision agent, on the current turn's text — resolves and analyses it.
-    if not artifacts:
-        return {"text": text}
+    # Fresh-turn first hop (no prior conversation, no steps yet): forward the turn
+    # text verbatim. This keeps any `<Image at db.images.…>` reference intact so the
+    # vision agent resolves and analyses it, and keeps the payload minimal.
+    prior, current, steps = split_turn(state)
+    if not prior and not steps:
+        return {"text": current}
 
-    # Subsequent hops: forward the turn text + what specialists produced so far.
-    parts = [f"User request:\n{text}", "Output from prior steps:"]
-    for a in artifacts:
+    # Otherwise give the specialist cross-turn context (prior conversation) and/or
+    # what earlier specialists produced this turn, so a downstream agent is never
+    # blind to upstream output or to what the user established on a previous turn.
+    parts: list[str] = []
+    if prior:
+        parts.append("Conversation so far:\n" + _render_history(prior))
+    parts.append(f"User request:\n{current}")
+    if steps:
         parts.append(
-            f"[{a.get('agent', '?')} / {a.get('skill')}]\n{_artifact_text(a)}"
+            "Output from prior steps this turn:\n"
+            + "\n".join(_step_label(m) for m in steps)
         )
     return {"text": "\n\n".join(parts)}
 
@@ -240,10 +257,10 @@ class SupervisorNode:
                 if isinstance(parsed, RouterDecision):
                     return _normalize(parsed.next, parsed.skill, parsed.reason)
                 # Provider ignored the schema — scrape the raw message instead.
-                return _parse_decision(_content_text(result.get("raw")))
+                return _parse_decision(content_text(result.get("raw")))
 
         response = await self._model.ainvoke(messages)
-        return _parse_decision(_content_text(response))
+        return _parse_decision(content_text(response))
 
     async def __call__(self, state: GraphState) -> dict:
         writer = stream_writer()
@@ -267,10 +284,7 @@ class SupervisorNode:
                 HumanMessage(content=_supervisor_context(state)),
             ])
 
-        decision["input"] = _build_skill_input(
-            decision["next"], decision["skill"], last_human_text(state),
-            state.get("artifacts") or [],
-        )
+        decision["input"] = _build_skill_input(state)
 
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": "supervisor", "node": "supervisor", "phase": "exit",

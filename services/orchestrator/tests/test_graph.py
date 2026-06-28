@@ -15,7 +15,6 @@ def _initial_state(text: str) -> GraphState:
         "messages": [HumanMessage(content=text)],
         "active_agent": None,
         "rag_context": [],
-        "artifacts": [],
         "pending_approval": None,
         "run_id": "r",
         "session_id": "s",

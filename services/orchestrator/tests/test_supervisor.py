@@ -46,7 +46,6 @@ def _state(text: str, *, mode: str = "auto", step_count: int = 0) -> GraphState:
         "active_agent": None,
         "route_decision": None,
         "rag_context": [],
-        "artifacts": [],
         "pending_approval": None,
         "run_id": "r",
         "session_id": "s",
@@ -54,6 +53,12 @@ def _state(text: str, *, mode: str = "auto", step_count: int = 0) -> GraphState:
         "step_count": step_count,
         "mode": mode,
     }
+
+
+def _specialist_names(result) -> list[str]:
+    """Names of the specialist outputs in `messages` (delegate tags each AIMessage
+    with `name=<agent>`; respond's final answer is left unnamed)."""
+    return [m.name for m in result["messages"] if getattr(m, "name", None)]
 
 
 def _router(*json_decisions: str) -> GenericFakeChatModel:
@@ -173,8 +178,8 @@ async def test_vision_then_code_then_respond_sequence():
     assert [c[1] for c in client.calls] == ["analyze-image", "edit"]
     assert client.calls[0][0] == "http://localhost:8104"  # vision
     assert client.calls[1][0] == "http://localhost:8102"  # code
-    # both outputs recorded as artifacts, in order
-    assert [a["agent"] for a in result["artifacts"]] == ["vision", "code"]
+    # both outputs recorded in messages (the single source of truth), in order
+    assert _specialist_names(result) == ["vision", "code"]
     assert result["step_count"] == 2  # two delegate hops
     # respond composed the single final answer
     assert result["active_agent"] == "assistant"
@@ -209,6 +214,50 @@ async def test_downstream_agent_receives_upstream_output():
     assert _REF in vision_payload
     # ...and the code agent sees vision's extracted code (the upstream artifact).
     assert "def f():\n    return 1" in code_payload
+
+
+@pytest.mark.asyncio
+async def test_context_carries_across_turns():
+    """Regression: a follow-up turn must see the PRIOR turn's context.
+
+    `messages` (add_messages + checkpointer) is the single source of truth, so the
+    supervisor's decision and the delegated specialist on turn 2 both see what
+    happened on turn 1 — not just the new message in isolation.
+    """
+    cp = MemorySaver()
+
+    # Turn 1: vision reads an image, then respond. (Output recorded into messages.)
+    g1 = build_supervisor_graph(
+        router_model=_router(
+            '{"next": "vision", "skill": "analyze-image"}', '{"next": "respond"}'
+        ),
+        general_model=_general("It's a login screen."),
+        general_system=SystemMessage(content="sys"),
+        client=MultiA2AClient({"analyze-image": "a login screen mockup"}),
+        directory=AgentDirectory(),
+        checkpointer=cp,
+    )
+    await g1.ainvoke(_state(f"what is this {_REF}"), _CFG)
+
+    # Turn 2 (same thread): a bare follow-up — only resolvable from turn-1 context.
+    router2 = _RecordingRouter('{"next": "code", "skill": "generate"}', '{"next": "respond"}')
+    client2 = MultiA2AClient({"generate": "<button>Login</button>"})
+    g2 = build_supervisor_graph(
+        router_model=router2,
+        general_model=_general("Here is the code."),
+        general_system=SystemMessage(content="sys"),
+        client=client2,
+        directory=AgentDirectory(),
+        checkpointer=cp,
+    )
+    await g2.ainvoke(_state("now build it"), _CFG)
+
+    # The supervisor's turn-2 decision saw the prior conversation (the image + what
+    # vision found), so "build it" is resolvable.
+    assert "login screen mockup" in router2.seen[0]
+    assert _REF in router2.seen[0]
+    # The delegated code agent also received that prior-turn context.
+    assert "login screen mockup" in client2.calls[0][2]["text"]
 
 
 @pytest.mark.asyncio
@@ -255,8 +304,12 @@ async def test_delegate_degrades_when_agent_unavailable_and_still_finishes():
 
     result = await graph.ainvoke(_state("write code"), _CFG)
 
-    # the failure was recorded as an artifact the supervisor could see...
-    assert any("unavailable" in a["result"].get("text", "") for a in result["artifacts"])
+    # the failure was recorded in messages (tagged as the code agent) so the
+    # supervisor could see it...
+    assert any(
+        getattr(m, "name", None) == "code" and "unavailable" in m.content
+        for m in result["messages"]
+    )
     assert result["step_count"] == 1  # the failed hop still counts (no infinite loop)
     # ...and the run still produced a final answer
     assert result["active_agent"] == "assistant"
@@ -299,5 +352,5 @@ async def test_summarizer_receives_text_payload():
 
     assert client.calls[0][1] == "tl;dr"
     assert client.calls[0][2] == {"text": "tldr this please"}
-    assert result["artifacts"][-1]["agent"] == "summarizer"
+    assert _specialist_names(result) == ["summarizer"]
     assert result["active_agent"] == "assistant"

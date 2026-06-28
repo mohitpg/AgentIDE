@@ -2,13 +2,14 @@
 Shared helpers for the supervisor graph's nodes.
 
 Each node lives in its own module as a small callable class; these are the bits
-they have in common — the custom-stream writer (a no-op under `ainvoke`) and a
-couple of message-history accessors.
+they have in common — the custom-stream writer (a no-op under `ainvoke`) and the
+message-history accessors that read the single source of truth, `state["messages"]`
+(accumulated across turns by the `add_messages` reducer + the checkpointer).
 """
 
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 
 from orchestrator.state import GraphState
 
@@ -27,18 +28,37 @@ def stream_writer():
         return lambda _event: None
 
 
-def last_human_text(state: GraphState) -> str:
-    for msg in reversed(state["messages"]):
-        if isinstance(msg, HumanMessage):
-            content = msg.content
-            return content if isinstance(content, str) else str(content)
-    return ""
+def content_text(message: object) -> str:
+    """Best-effort string body of a chat message (or anything)."""
+    content = getattr(message, "content", message)
+    return content if isinstance(content, str) else str(content)
 
 
-def history(state: GraphState) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
-    for msg in state["messages"]:
-        role = "user" if isinstance(msg, HumanMessage) else "assistant"
-        if isinstance(msg.content, str):
-            out.append({"role": role, "content": msg.content})
-    return out
+def _last_human_index(messages: list[BaseMessage]) -> int | None:
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            return i
+    return None
+
+
+def split_turn(
+    state: GraphState,
+) -> tuple[list[BaseMessage], str, list[BaseMessage]]:
+    """Slice the single source of truth into the three views the loop needs.
+
+    Returns `(prior, current_request, this_turn_steps)`:
+    - **prior** — every message before the latest human turn: the conversation so
+      far (previous turns). Gives every LLM call cross-turn context.
+    - **current_request** — the latest human message's text: this turn's ask.
+    - **this_turn_steps** — the messages after it: what specialists have produced
+      *this* turn (each tagged with the agent `name`). Empty on the first hop.
+
+    Because `messages` is reducer-accumulated and checkpoint-restored, this one
+    split replaces the old per-turn `artifacts` list — no separate channel to keep
+    in sync, and prior turns are no longer invisible to the supervisor/delegate.
+    """
+    messages = state["messages"]
+    idx = _last_human_index(messages)
+    if idx is None:
+        return [], "", list(messages)
+    return list(messages[:idx]), content_text(messages[idx]), list(messages[idx + 1:])

@@ -1,12 +1,13 @@
 """
 The delegate node — runs one specialist agent over A2A, then loops back.
 
-Streams the specialist's tokens through the unified event schema, records its
-output as an artifact (accumulated for the next supervisor pass), and increments
-the loop counter. Best-effort: a down/failed agent degrades to a note instead of
-aborting the turn, so the supervisor can pick another agent or finish. It emits
-only the `agent_step` exit — the terminal `respond` node owns the single
-`DoneEvent` for the whole turn.
+Streams the specialist's tokens through the unified event schema, appends its
+output to `messages` as an `AIMessage` tagged with the agent `name` + `skill` (the
+single source of truth the next supervisor pass, downstream delegates, and respond
+all read), and increments the loop counter. Best-effort: a down/failed agent
+degrades to a note instead of aborting the turn, so the supervisor can pick another
+agent or finish. It emits only the `agent_step` exit — the terminal `respond` node
+owns the single `DoneEvent` for the whole turn.
 """
 
 from __future__ import annotations
@@ -70,16 +71,17 @@ class DelegateNode:
                 "code": "a2a_unavailable", "message": str(exc), "recoverable": True}))
             text = f"The {agent_id} agent is currently unavailable."
 
-        artifact = {"agent": agent_id, "skill": skill, "result": result or {"text": text}}
         # Exit only — no DoneEvent here; the terminal `respond` node emits the
         # single DoneEvent once the whole turn is composed.
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": agent_id, "node": "delegate", "phase": "exit"}))
         return {
-            # Accumulate explicitly (the channel has no reducer): each hop appends
-            # to what prior hops produced, so the next supervisor pass sees them all.
-            "messages": [AIMessage(content=text)],
-            "artifacts": [*(state.get("artifacts") or []), artifact],
+            # The `add_messages` reducer appends this to the running history, so the
+            # next supervisor pass, any downstream delegate, and respond all see it.
+            # `name`/`skill` tag it as this agent's output (replacing the old
+            # artifacts buffer); `split_turn` reads these back.
+            "messages": [AIMessage(content=text, name=agent_id,
+                                   additional_kwargs={"skill": skill})],
             "active_agent": agent_id,
             "step_count": state.get("step_count", 0) + 1,
         }
