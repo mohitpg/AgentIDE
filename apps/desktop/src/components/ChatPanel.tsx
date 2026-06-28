@@ -68,6 +68,10 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
   const scrollRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // The composer's height at rows={2}, captured once on first measure. The
+  // textarea auto-grows up to 4× this, then scrolls.
+  const baseComposerHeightRef = useRef<number | null>(null)
   // Whether to keep the view pinned to the bottom as new tokens stream in. Stays
   // true while the user sits at the bottom; flips off the moment they scroll up,
   // and back on when they scroll back down. A ref (not state) so updating it
@@ -78,6 +82,22 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
   useEffect(() => {
     localStorage.setItem(THINKING_KEY, thinking ? '1' : '0')
   }, [thinking])
+
+  // Grow the composer to fit its content, capped at 4× the base height; past
+  // that it scrolls. Driven off `input`, so clearing it on send resets the size.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    if (baseComposerHeightRef.current == null) baseComposerHeightRef.current = el.offsetHeight
+    const base = baseComposerHeightRef.current
+    el.style.height = 'auto'
+    const style = getComputedStyle(el)
+    const borderY = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+    const needed = el.scrollHeight + borderY // border-box height to show all content
+    const max = base * 4
+    el.style.height = `${Math.min(Math.max(needed, base), max)}px`
+    el.style.overflowY = needed > max ? 'auto' : 'hidden'
+  }, [input])
 
   // Keep the latest message in view as tokens stream in — but only while the user
   // is parked at the bottom. If they've scrolled up to read, leave them be.
@@ -373,6 +393,7 @@ export default function ChatPanel({ sessionId, chat, onIndexed, onOpenSource }: 
             )}
           </Dropdown>
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
