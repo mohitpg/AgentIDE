@@ -34,6 +34,15 @@ class AgentSettings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.3  # specialists run cooler than the chat default
 
+    # ── Web Search agent (Phase 5) ────────────────────────────────────────────
+    # The Web agent searches via the Tavily API then synthesizes a cited answer.
+    # Empty key → the agent degrades to a "web search not configured" message.
+    tavily_api_key: str = ""
+    web_search_max_results: int = 5
+    # Per-page character cap when fetching/extracting a page's readable text.
+    web_fetch_chars: int = 4000
+    web_fetch_timeout_seconds: float = 15.0
+
     # ── A2A auth ──────────────────────────────────────────────────────────────
     # Shared bearer secret enforced on skill invocation. Empty = auth disabled
     # (dev default); set A2A_AUTH_TOKEN to require `Authorization: Bearer <token>`.

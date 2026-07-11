@@ -125,6 +125,12 @@ def test_parse_decision_snaps_invalid_vision_skill():
     assert d["skill"] in {"analyze-image", "ocr", "diagram-to-code"}
 
 
+def test_parse_decision_snaps_invalid_web_skill():
+    d = _parse_decision('{"next": "web", "skill": "bogus"}')
+    assert d["next"] == "web"
+    assert d["skill"] in {"search", "fetch"}
+
+
 def test_parse_decision_respond_sentinel():
     d = _parse_decision('{"next": "respond", "reason": "all done"}')
     assert d == {"next": "respond", "skill": None, "reason": "all done"}
@@ -336,6 +342,26 @@ async def test_image_ref_forwarded_to_vision():
     assert _REF in router.seen[0]
     # ...and the delegate forwards it to the vision agent, which resolves it.
     assert _REF in client.calls[0][2]["text"]
+
+
+@pytest.mark.asyncio
+async def test_web_search_routes_to_web_agent():
+    """A live-info question routes to the web agent (port 8105) then responds."""
+    client = FakeA2AClient(
+        "Python 3.13 is the latest [1].", result={"output": "Python 3.13 is the latest [1]."}
+    )
+    graph = _build(
+        _router('{"next": "web", "skill": "search"}', '{"next": "respond"}'),
+        _general("The latest Python is 3.13 [1]."),
+        client,
+    )
+
+    result = await graph.ainvoke(_state("what's the latest python version?"), _CFG)
+
+    assert client.calls[0][0] == "http://localhost:8105"  # web agent URL
+    assert client.calls[0][1] == "search"
+    assert _specialist_names(result) == ["web"]
+    assert result["active_agent"] == "assistant"
 
 
 @pytest.mark.asyncio

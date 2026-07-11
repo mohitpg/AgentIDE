@@ -59,7 +59,11 @@ SUPERVISOR_PROMPT = (
     "an image), diagram-to-code (turn a diagram/mockup/screenshot into code). Use "
     "vision whenever the message includes an image — an attached-image reference "
     "like `<Image at db.images.…>`, a data URI, an image URL, or a local image "
-    "path — or asks about a screenshot/diagram/photo.\n\n"
+    "path — or asks about a screenshot/diagram/photo.\n"
+    "- web: search (search the web and answer with cited sources), fetch (read the "
+    "specific URL(s) in the message and answer/summarize from them). Use web for "
+    "current events, live/online information, anything needing up-to-date facts "
+    "not in the indexed documents, or when the user gives a URL to read.\n\n"
     "Sequencing: some requests need several agents IN ORDER — e.g. an image of "
     "code must be read by `vision` BEFORE `code` can refactor it, and the right "
     "second step is often only knowable once the first has run. Pick the agent "
@@ -79,6 +83,7 @@ _VALID = {
     "summarizer": {"summarize-file", "summarize-thread", "tl;dr"},
     "rag": {"answer", "retrieve"},
     "vision": {"analyze-image", "ocr", "diagram-to-code"},
+    "web": {"search", "fetch"},
 }
 
 
@@ -94,7 +99,7 @@ class RouterDecision(BaseModel):
     next: str = Field(
         description=(
             "The single next step: an agent id (one of: code, summarizer, rag, "
-            "vision) to delegate to, or 'respond' to compose the final answer."
+            "vision, web) to delegate to, or 'respond' to compose the final answer."
         ),
     )
     skill: str | None = Field(

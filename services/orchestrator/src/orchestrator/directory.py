@@ -17,6 +17,7 @@ _DEFAULTS = {
     "code": "http://localhost:8102",
     "rag": "http://localhost:8103",
     "vision": "http://localhost:8104",
+    "web": "http://localhost:8105",
 }
 
 
