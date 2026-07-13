@@ -35,9 +35,10 @@ class AgentSettings(BaseSettings):
     llm_temperature: float = 0.3  # specialists run cooler than the chat default
 
     # ── Web Search agent (Phase 5) ────────────────────────────────────────────
-    # The Web agent searches via the Tavily API then synthesizes a cited answer.
-    # Empty key → the agent degrades to a "web search not configured" message.
-    tavily_api_key: str = ""
+    # The Web agent searches via the Serper API (google.serper.dev) then
+    # synthesizes a cited answer. Empty key → the agent degrades to a "web search
+    # not configured" message.
+    serper_api_key: str = ""
     web_search_max_results: int = 5
     # Per-page character cap when fetching/extracting a page's readable text.
     web_fetch_chars: int = 4000

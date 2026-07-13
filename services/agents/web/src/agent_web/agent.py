@@ -11,7 +11,7 @@ citation contract the UI already renders for RAG. Two skills:
             summarize/answer from them (with source citations).
 
 It is an independent A2A service. Search goes through an injectable
-`WebSearchClient` (Tavily by default); page fetches go through `fetch_url`. Both
+`WebSearchClient` (Serper by default); page fetches go through `fetch_url`. Both
 seams are injectable so tests never touch the network. Heavy bulk crawls are
 handled off-request by the Celery `web` queue (`workers.tasks.web.crawl_urls`).
 """
@@ -49,7 +49,7 @@ _SKILLS_DIR = Path(__file__).parent / "skills"
 _UNSET = object()
 
 _NOT_CONFIGURED = (
-    "Web search isn't configured. Set TAVILY_API_KEY in the environment so I can "
+    "Web search isn't configured. Set SERPER_API_KEY in the environment so I can "
     "query the web, then ask again."
 )
 _NO_RESULTS = (
@@ -108,7 +108,7 @@ class WebAgent(BaseAgent):
         # API key is set); passing None explicitly forces the not-configured path;
         # tests inject a fake to stay offline.
         self._search_client: WebSearchClient | None = (
-            default_search_client(s.tavily_api_key, timeout=s.web_fetch_timeout_seconds)
+            default_search_client(s.serper_api_key, timeout=s.web_fetch_timeout_seconds)
             if search_client is _UNSET
             else search_client  # type: ignore[assignment]
         )

@@ -3,15 +3,18 @@ Web Search agent tests — no models, no network.
 
 Card/skills are exercised directly; `run` is exercised with an injected fake
 search client (scripted results), an injected page fetcher, and a fake chat model,
-so neither the Tavily API, real HTTP, nor an LLM is needed.
+so neither the Serper API, real HTTP, nor an LLM is needed.
 """
 
 from __future__ import annotations
 
+import json
+
+import httpx
 from langchain_core.messages import AIMessageChunk
 
 from agent_web.agent import WebAgent, format_results
-from agent_web.search import SearchResult, extract_urls, html_to_text
+from agent_web.search import SearchResult, SerperClient, extract_urls, html_to_text
 
 
 class FakeSearchClient:
@@ -100,6 +103,44 @@ def test_format_results_numbers_context_and_sources() -> None:
     assert "Sources:" in sources
     assert "[1] Alpha — https://a.com" in sources
     assert "[2] Beta — https://b.com" in sources
+
+
+# ── Serper client (real mapping logic, faked transport) ────────────────────────
+async def test_serper_client_maps_organic_results() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-API-KEY"] == "test-key"
+        body = json.loads(request.content)
+        assert body["q"] == "python version"
+        assert body["num"] == 5
+        return httpx.Response(
+            200,
+            json={
+                "organic": [
+                    {"title": "Python.org", "link": "https://python.org",
+                     "snippet": "Latest is 3.13"},
+                    {"title": "Wiki", "link": "https://en.wikipedia.org",
+                     "snippet": "Python is a language"},
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        results = await SerperClient("test-key", client=http).search(
+            "python version", max_results=5
+        )
+
+    assert [r.url for r in results] == ["https://python.org", "https://en.wikipedia.org"]
+    assert results[0].title == "Python.org"
+    assert results[0].content == "Latest is 3.13"
+
+
+async def test_serper_client_empty_organic_returns_no_results() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        results = await SerperClient("k", client=http).search("nothing", max_results=5)
+    assert results == []
 
 
 # ── search skill ───────────────────────────────────────────────────────────────

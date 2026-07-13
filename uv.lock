@@ -214,10 +214,22 @@ dependencies = [
     { name = "httpx" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "agentide-agent-common", editable = "services/agents/common" },
     { name = "httpx", specifier = ">=0.27" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
 ]
 
 [[package]]
@@ -407,6 +419,7 @@ version = "0.1.0"
 source = { editable = "services/workers" }
 dependencies = [
     { name = "agentide-agent-vision" },
+    { name = "agentide-agent-web" },
     { name = "agentide-rag" },
     { name = "agentide-schemas" },
     { name = "celery", extra = ["redis"] },
@@ -422,6 +435,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agentide-agent-vision", editable = "services/agents/vision" },
+    { name = "agentide-agent-web", editable = "services/agents/web" },
     { name = "agentide-rag", editable = "packages/rag" },
     { name = "agentide-schemas", editable = "packages/schemas" },
     { name = "celery", extras = ["redis"], specifier = ">=5.4" },

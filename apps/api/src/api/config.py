@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     openrouter_api_key: str = "" # test key
-    openrouter_model: str = "poolside/laguna-xs.2:free"
+    openrouter_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7
 

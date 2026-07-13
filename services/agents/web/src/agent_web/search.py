@@ -5,9 +5,10 @@ The chat / A2A transport carries a single text field, so the agent gets a plain
 query (or a message containing URLs). This module provides the two capabilities
 the agent composes on top of the LLM:
 
-  - `WebSearchClient` — a search-API abstraction. `TavilyClient` implements it over
-    Tavily's REST API; `default_search_client()` builds one from settings (or
-    returns ``None`` when no key is configured, so the agent degrades gracefully).
+  - `WebSearchClient` — a search-API abstraction. `SerperClient` implements it over
+    Serper's REST API (google.serper.dev); `default_search_client()` builds one from
+    settings (or returns ``None`` when no key is configured, so the agent degrades
+    gracefully).
   - `fetch_url` / `html_to_text` — fetch a page and reduce it to readable text
     (scripts/styles/markup stripped, entities unescaped, whitespace collapsed),
     with no heavy HTML dependency. Reused by the Celery `web` crawl task.
@@ -30,7 +31,7 @@ DEFAULT_MAX_RESULTS = 5
 DEFAULT_FETCH_CHARS = 4000
 DEFAULT_TIMEOUT_SECONDS = 15.0
 
-_TAVILY_ENDPOINT = "https://api.tavily.com/search"
+_SERPER_ENDPOINT = "https://google.serper.dev/search"
 
 # http(s) URL up to the first whitespace / common trailing punctuation.
 _URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
@@ -124,8 +125,12 @@ class WebSearchClient(Protocol):
     async def search(self, query: str, *, max_results: int) -> list[SearchResult]: ...
 
 
-class TavilyClient:
-    """`WebSearchClient` over the Tavily search API (a single POST /search)."""
+class SerperClient:
+    """`WebSearchClient` over the Serper search API (a single POST to /search).
+
+    Serper wraps Google search: it returns an ``organic`` list of ``{title, link,
+    snippet}`` results, which map straight onto `SearchResult`.
+    """
 
     def __init__(
         self,
@@ -139,28 +144,24 @@ class TavilyClient:
         self._timeout = timeout
 
     async def search(self, query: str, *, max_results: int) -> list[SearchResult]:
-        payload = {
-            "api_key": self._api_key,
-            "query": query,
-            "max_results": max_results,
-            "search_depth": "basic",
-        }
+        payload = {"q": query, "num": max_results}
+        headers = {"X-API-KEY": self._api_key, "Content-Type": "application/json"}
         own = self._client is None
         client = self._client or httpx.AsyncClient(timeout=self._timeout)
         try:
-            resp = await client.post(_TAVILY_ENDPOINT, json=payload)
+            resp = await client.post(_SERPER_ENDPOINT, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
         finally:
             if own:
                 await client.aclose()
         results: list[SearchResult] = []
-        for item in data.get("results", []):
+        for item in data.get("organic", [])[:max_results]:
             results.append(
                 SearchResult(
-                    title=item.get("title") or item.get("url", "result"),
-                    url=item.get("url", ""),
-                    content=(item.get("content") or "").strip(),
+                    title=item.get("title") or item.get("link", "result"),
+                    url=item.get("link", ""),
+                    content=(item.get("snippet") or "").strip(),
                 )
             )
         return results
@@ -172,4 +173,4 @@ def default_search_client(
     """Build the configured search client, or ``None`` when no API key is set."""
     if not api_key:
         return None
-    return TavilyClient(api_key, timeout=timeout)
+    return SerperClient(api_key, timeout=timeout)
