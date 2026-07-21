@@ -5,9 +5,6 @@ Run standalone:
     uvicorn agent_rag.app:app --port 8103
 or:
     python -m agent_rag
-
-Registry: like the other agents it self-registers with the gateway when
-REGISTRY_ENABLED is set, so the supervisor can discover and delegate to it.
 """
 
 from __future__ import annotations

@@ -16,9 +16,6 @@ A skill is a Markdown file with YAML frontmatter + a body:
     ---
     You are summarizing a file. Produce a faithful, concise summary ...
 
-The frontmatter is converted to an A2A `AgentSkill` (advertised on the Agent
-Card); the body becomes the skill's system prompt at execution time. Skills are
-data, not code — adding a skill means adding a `.md` file.
 """
 
 from __future__ import annotations

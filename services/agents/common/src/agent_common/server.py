@@ -7,13 +7,6 @@ speaks the A2A protocol:
   - POST /                             → JSON-RPC: message/send, message/stream,
                                           tasks/get, tasks/cancel, …
 
-Skill execution is handled by `LLMAgentExecutor`; tasks are tracked in an
-in-memory store (swap for a Postgres-backed store in Phase 7).
-
-The app's Starlette lifespan always runs the agent's `astartup`/`ashutdown`
-hooks (Phase 6: tool-using agents connect their MCP servers there). When
-`registry_enabled` is set it additionally self-registers with the gateway's
-agent registry on startup and deregisters on shutdown (Phase 2).
 """
 
 from __future__ import annotations

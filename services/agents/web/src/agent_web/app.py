@@ -5,9 +5,6 @@ Run standalone:
     uvicorn agent_web.app:app --port 8105
 or:
     python -m agent_web
-
-Like the other agents it self-registers with the gateway when REGISTRY_ENABLED is
-set, so the supervisor can discover and delegate web-search work to it.
 """
 
 from __future__ import annotations

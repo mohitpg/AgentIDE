@@ -33,7 +33,7 @@ export async function deleteSession(id: string): Promise<void> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
-// ── Tasks (Phase 3) ─────────────────────────────────────────────────────────
+// ── Tasks ─────────────────────────────────────────────────────────
 export async function listTasks(): Promise<Task[]> {
   return json(await fetch(`${API_BASE}/tasks`))
 }
@@ -64,7 +64,7 @@ export async function getTask(id: string): Promise<Task> {
   return json(await fetch(`${API_BASE}/tasks/${id}`))
 }
 
-// ── RAG (Phase 4) ─────────────────────────────────────────────────────────────
+// ── RAG ─────────────────────────────────────────────────────────────
 export async function uploadDocument(
   file: File,
   sessionId?: string | null,
@@ -147,7 +147,7 @@ export async function searchRag(query: string, topK?: number): Promise<RagSearch
   )
 }
 
-// ── MCP servers (Phase 6) ─────────────────────────────────────────────────────
+// ── MCP servers ─────────────────────────────────────────────────────
 export type MCPServerCreate = Pick<MCPServer, 'id'> &
   Partial<Omit<MCPServer, 'id' | 'created_at' | 'updated_at'>>
 

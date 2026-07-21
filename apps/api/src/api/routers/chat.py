@@ -29,9 +29,7 @@ from api.schemas.chat import ChatRequest
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Stored-image reference token — stripped when deriving a session title so the
-# title isn't a raw `<Image at db.images.…>` reference (an image-only turn falls
-# back to a generic label).
+# Stored-image reference token
 _IMAGE_REF_RE = re.compile(r"<Image at db\.images\.[0-9a-fA-F-]{36}>")
 
 
@@ -61,9 +59,6 @@ async def chat_ws(websocket: WebSocket) -> None:
             async with AsyncSessionLocal() as db:
                 conversation = await db.get(Conversation, req.session_id)
                 if conversation is None:
-                    # First message of a new (draft) session. The UI opens a chat
-                    # with a client-generated id and only persists it here, on the
-                    # first send — so empty chats never reach the DB or history.
                     conversation = Conversation(id=req.session_id)
                     db.add(conversation)
                     await db.flush()
@@ -75,9 +70,7 @@ async def chat_ws(websocket: WebSocket) -> None:
                         content=req.content,
                     )
                 )
-                # Derive a title from the first message. Strip any stored-image
-                # reference tokens first (an image-only turn falls back to a
-                # generic label).
+                # Derive a title from the first message
                 if not conversation.title:
                     title = _IMAGE_REF_RE.sub("", req.content).strip()
                     conversation.title = title[:60] or "Image"
@@ -97,8 +90,7 @@ async def chat_ws(websocket: WebSocket) -> None:
                 ):
                     await websocket.send_json(event.model_dump(mode="json"))
                     if isinstance(event, TokenEvent):
-                        # Persist only the final answer; intermediate "thinking"
-                        # tokens are a live affordance, not part of the message.
+                        # Persist only the final answer; not intermediate "thinking"
                         if event.data.get("channel", "final") != "thinking":
                             assistant_text += event.data["content"]
                     elif isinstance(event, DoneEvent):

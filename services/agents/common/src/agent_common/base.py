@@ -7,10 +7,6 @@ containing SKILL.md files. The base:
   - builds the A2A `AgentCard`,
   - provides a default LLM-streaming `run()` that uses the skill's body as the
     system prompt.
-
-Tool-using agents (e.g. Code with filesystem/git MCP in Phase 6) override `run`.
-The generic `LLMAgentExecutor` in `executor.py` adapts any BaseAgent to the A2A
-protocol, so agents never touch protocol plumbing.
 """
 
 from __future__ import annotations
@@ -70,7 +66,7 @@ class BaseAgent(ABC):
     async def astartup(self) -> None:
         """Called once when the A2A app starts. Default: nothing.
 
-        Tool-using agents override this to connect their MCP servers (Phase 6).
+        Tool-using agents override this to connect their MCP servers
         """
 
     async def ashutdown(self) -> None:

@@ -4,16 +4,7 @@ Web Search agent — search → fetch/extract → synthesize with citations.
 Like the RAG agent (and unlike the LLM-only Code/Summarizer agents), this agent
 overrides `run`: it gathers grounding context from the live web, then answers with
 inline `[n]` citations and a deterministic `Sources:` footer of URLs — the same
-citation contract the UI already renders for RAG. Two skills:
-
-  search  — search the web for the query, then synthesize a cited answer.
-  fetch   — fetch the specific URL(s) in the message, extract their text, and
-            summarize/answer from them (with source citations).
-
-It is an independent A2A service. Search goes through an injectable
-`WebSearchClient` (Serper by default); page fetches go through `fetch_url`. Both
-seams are injectable so tests never touch the network. Heavy bulk crawls are
-handled off-request by the Celery `web` queue (`workers.tasks.web.crawl_urls`).
+citation contract the UI already renders for RAG.
 """
 
 from __future__ import annotations

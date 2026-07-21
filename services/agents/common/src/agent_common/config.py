@@ -24,46 +24,30 @@ class AgentSettings(BaseSettings):
         extra="ignore",
     )
 
-    # ── LLM (OpenRouter — the stack-wide default chosen in Phase 1) ────────────
+    # ──────────── LLM ─────────────────────────────────────────────────────────
     openrouter_api_key: str = ""
     # openrouter_model: str = "poolside/laguna-xs.2:free"
     openrouter_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-    # Multimodal model for the Vision agent (Phase 5). Must be vision-capable; the
-    # text default above generally is not. Override via OPENROUTER_VISION_MODEL.
     openrouter_vision_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     llm_max_tokens: int = 4096
-    llm_temperature: float = 0.3  # specialists run cooler than the chat default
+    llm_temperature: float = 0.3 
 
-    # ── Web Search agent (Phase 5) ────────────────────────────────────────────
-    # The Web agent searches via the Serper API (google.serper.dev) then
-    # synthesizes a cited answer. Empty key → the agent degrades to a "web search
-    # not configured" message.
+    # ── Web Search agent ──────────────────────────────────────────────────────
     serper_api_key: str = ""
     web_search_max_results: int = 5
-    # Per-page character cap when fetching/extracting a page's readable text.
     web_fetch_chars: int = 4000
     web_fetch_timeout_seconds: float = 15.0
 
     # ── A2A auth ──────────────────────────────────────────────────────────────
-    # Shared bearer secret enforced on skill invocation. Empty = auth disabled
-    # (dev default); set A2A_AUTH_TOKEN to require `Authorization: Bearer <token>`.
     a2a_auth_token: str = ""
 
-    # ── Agent registry (Phase 2) ──────────────────────────────────────────────
-    # On startup an agent registers its Agent Card with the gateway and heartbeats
-    # so the supervisor can discover it. Disabled by default so an agent run in
-    # isolation doesn't depend on the gateway; the stack enables it via env.
+    # ── Agent registry ────────────────────────────────────────────────────────
     registry_enabled: bool = True
     gateway_url: str = "http://localhost:8000"
     registry_heartbeat_seconds: int = 30
 
-    # ── MCP (Phase 6) ─────────────────────────────────────────────────────────
-    # Tool-using agents (Code, Web) connect MCP servers on startup. They fetch
-    # their assignments from the gateway's /mcp API; if there are none they fall
-    # back to the built-in core set scoped to `mcp_workspace_dir`. Set
-    # MCP_ENABLED=false to disable tool use entirely (pure-LLM agents).
+    # ── MCP ────────────────────────────────────────────────────────────────────
     mcp_enabled: bool = True
-    # Sandbox root for the built-in filesystem/git servers. Empty → process CWD.
     mcp_workspace_dir: str = ""
 
 

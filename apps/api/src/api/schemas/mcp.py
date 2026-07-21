@@ -1,4 +1,4 @@
-"""Pydantic DTOs for the /mcp registry API (Phase 6)."""
+"""Pydantic DTOs for the /mcp registry API"""
 
 from __future__ import annotations
 

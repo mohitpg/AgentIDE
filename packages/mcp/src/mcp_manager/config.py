@@ -12,8 +12,6 @@ Exposure is two-layered so the settings UI can be coarse or fine-grained:
   - `allowed_agents` — which agents may use this server (empty = all),
   - `tool_allowlist` — which of the server's tools are exposed (empty = all).
 
-`builtin_servers()` returns the Phase-6 core set (filesystem, git, web-fetch)
-with sensible defaults; users override or add more from the settings UI.
 """
 
 from __future__ import annotations
@@ -62,10 +60,7 @@ class MCPServerConfig(BaseModel):
         return not self.tool_allowlist or tool_name in self.tool_allowlist
 
 
-# ── built-in core servers (Phase 6) ────────────────────────────────────────────
-# The reference MCP servers are launched via the platform's node/python runners.
-# On Windows the launchers are .cmd shims, which the subprocess transport must
-# name explicitly.
+# ── built-in core servers ──────────────────────────────────────────────────────
 
 
 def _npx() -> str:
@@ -126,7 +121,6 @@ def fetch_server(*, allowed_agents: list[str] | None = None) -> MCPServerConfig:
 def builtin_servers(
     workspace: str, *, repo: str | None = None
 ) -> list[MCPServerConfig]:
-    """The Phase-6 core set: filesystem + git (over ``workspace``) and web-fetch."""
     return [
         filesystem_server(workspace),
         git_server(repo or workspace),

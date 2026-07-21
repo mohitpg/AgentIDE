@@ -1,23 +1,10 @@
 """
-Agent registry — Postgres system-of-record + Redis cache (Phase 2).
+Agent registry — Postgres system-of-record + Redis cache.
 
 Specialist agents POST their A2A Agent Card to ``/agents/register`` on startup
-and heartbeat periodically; the supervisor discovers live agents and their skills
-here instead of a hard-coded map (see ARCHITECTURE §2.4).
+and heartbeat periodically.
 
-Design:
-  - **Postgres** is the source of truth (one row per agent, see `AgentRegistration`).
-  - The **live-agent list** is cached in Redis under a single key with a short TTL
-    plus explicit invalidation, so discovery on the hot path is one Redis GET.
-  - **Liveness** is derived from `last_heartbeat`: an agent is live if it beat
-    within `ttl_seconds`. A steady-state heartbeat deliberately does *not* bust
-    the cache (it doesn't change membership or cards, and the liveness window is
-    far larger than the cache TTL, so a slightly stale cached timestamp can't
-    misjudge a still-live agent). register/deregister — and a heartbeat that
-    *revives* an already-stale agent — do invalidate, since they change the set.
-
-All Redis access degrades gracefully: if Redis is down we fall back to Postgres,
-so a cache outage slows discovery but never breaks it.
+All Redis access degrades gracefully: if Redis is down we fall back to Postgres
 """
 
 from __future__ import annotations
@@ -107,8 +94,7 @@ class AgentRegistry:
         row = await self._db.get(AgentRegistration, agent_id)
         if row is None:
             return False
-        # Was it already stale? A revival must bust the cache so the agent
-        # reappears at once; a steady-state beat must not (see module docstring).
+
         was_stale = _now() - _as_aware(row.last_heartbeat) > timedelta(seconds=self._ttl)
         row.last_heartbeat = _now()
         await self._db.flush()

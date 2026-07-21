@@ -1,7 +1,7 @@
 [project]
 name = "agentide-agent-indexer"
 version = "0.1.0"
-description = "Indexer agent – chunk, embed, upsert into pgvector (runs in Celery, Phase 4)"
+description = "Indexer agent – chunk, embed, upsert into pgvector (runs in Celery)"
 requires-python = ">=3.12"
 dependencies = [
     "agentide-agent-common",

@@ -1,13 +1,9 @@
 """
-MCP server store — Postgres-backed registry for the /mcp API (Phase 6).
+MCP server store — Postgres-backed registry for the /mcp API.
 
 CRUD over the `mcp_servers` table plus `configs_for_agent`, which the agents call
-(via ``GET /mcp/agent/{id}``) to learn which servers they may connect. A row maps
-directly onto a `mcp_manager.MCPServerConfig`, the shape the manager connects and
-the agent reconstructs.
+(via ``GET /mcp/agent/{id}``) to learn which servers they may connect.
 
-Unlike the agent registry there's no Redis cache here: this is settings data read
-on agent startup and in the (rare) settings UI, not on a per-request hot path.
 """
 
 from __future__ import annotations

@@ -1,15 +1,10 @@
 """
-MCP server registry model — Phase 6.
+MCP server registry model
 
 One row per registered MCP server. This is the settings-driven plug-in surface:
 operators add a server (filesystem, git, web-fetch, or any 3rd-party MCP server)
 and assign it to agents from the UI — no code changes. The columns mirror
 `mcp_manager.MCPServerConfig` so a row maps straight onto a connectable config.
-
-Exposure is two-layered: `allowed_agents` gates which agents see the server
-(empty = all), `tool_allowlist` gates which of its tools are exposed (empty =
-all). JSON columns use the portable JSONB-on-Postgres variant so the table also
-builds on SQLite in unit tests.
 """
 
 from __future__ import annotations
@@ -26,8 +21,7 @@ _JSON = JSON().with_variant(JSONB, "postgresql")
 class MCPServer(Base, TimestampMixin):
     __tablename__ = "mcp_servers"
 
-    # Stable id, e.g. "filesystem" / "git" — natural primary key, also the tool
-    # namespace prefix (must not contain "__").
+    # Stable id
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

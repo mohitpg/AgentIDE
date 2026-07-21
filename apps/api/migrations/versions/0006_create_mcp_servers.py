@@ -4,7 +4,7 @@ Revision ID: 0006
 Revises: 0005
 Create Date: 2026-06-19 00:00:00.000000
 
-MCP server registry for Phase 6. One row per registered MCP server; columns
+MCP server registry. One row per registered MCP server; columns
 mirror `mcp_manager.MCPServerConfig` so a row maps straight onto a connectable
 config. The settings UI / `/mcp` API own this table.
 """

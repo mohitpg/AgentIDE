@@ -1,7 +1,7 @@
 [project]
 name = "agentide-agent-rag"
 version = "0.1.0"
-description = "RAG agent – retrieve, rerank, cite, answer-with-context (Phase 4)"
+description = "RAG agent – retrieve, rerank, cite, answer-with-context"
 requires-python = ">=3.12"
 dependencies = [
     "agentide-agent-common",

@@ -1,7 +1,7 @@
 [project]
 name = "agentide-agent-summarizer"
 version = "0.1.0"
-description = "Summarizer agent – summarize-file, summarize-thread, tl;dr (Phase 2)"
+description = "Summarizer agent – summarize-file, summarize-thread, tl;dr"
 requires-python = ">=3.12"
 dependencies = [
     "agentide-agent-common",

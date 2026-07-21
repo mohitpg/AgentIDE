@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # ── Redis ────────────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
 
-    # ── Agent registry (Phase 2) ──────────────────────────────────────────────
+    # ── Agent registry ───────────────────────────────────────────────────────
     # An agent is "live" if it has heartbeat within this window. Set to ~3x the
     # agent heartbeat interval so a couple of missed beats don't drop it.
     registry_ttl_seconds: int = 90
@@ -66,9 +66,8 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7
 
-    # ── RAG (Phase 4) ─────────────────────────────────────────────────────────
+    # ── RAG ──────────────────────────────────────────────────────────────────
     # Embedding model + dimension. `rag_embedding_dim` MUST match the vector(N)
-    # column created in migration 0005; changing the model means a new migration.
     rag_embedding_model: str = "BAAI/bge-small-en-v1.5"
     rag_embedding_dim: int = 384
     rag_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -88,7 +87,7 @@ class Settings(BaseSettings):
     image_upload_dir: str = ""
     image_max_upload_bytes: int = 10_000_000  # 10 MB upload cap
 
-    # ── MCP (Phase 6) ─────────────────────────────────────────────────────────
+    # ── MCP ──────────────────────────────────────────────────────────────────
     # Default sandbox root used by the built-in filesystem/git server templates
     # offered at GET /mcp/builtins. Empty → the API process's working directory.
     mcp_workspace_dir: str = ""

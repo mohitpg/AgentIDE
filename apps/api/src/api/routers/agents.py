@@ -1,5 +1,5 @@
 """
-/agents – the agent registry (Phase 2).
+/agents – the agent registry
 
 Specialist A2A agents self-register here on startup and heartbeat to stay live;
 the supervisor discovers them by skill. Backed by `AgentRegistry`

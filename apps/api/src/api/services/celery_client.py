@@ -1,11 +1,9 @@
 """
-Gateway-side Celery client (Phase 3).
+Gateway-side Celery client
 
-The API enqueues and cancels jobs but never runs them, so it builds its own
-lightweight Celery app that shares the broker/backend and the queue topology with
-`services/workers`, and dispatches by **task name** (`send_task`) rather than
-importing the worker task code. This keeps the gateway decoupled from the worker
-package — they only agree on broker config + task names.
+The API builds its own lightweight Celery app that shares the broker/backend 
+and the queue topology with `services/workers`, and dispatches by **task name**
+(`send_task`) rather than importing the worker task code
 
 Both calls hit RabbitMQ synchronously, so callers should run them off the event
 loop (``await asyncio.to_thread(...)``).
@@ -23,8 +21,6 @@ from api.config import get_settings
 _settings = get_settings()
 _exchange = Exchange("agentide", type="direct")
 
-# Same broker, backend, exchange and queues as services/workers/app.py so messages
-# route to the queues the workers consume.
 celery_client = Celery(
     "agentide-gateway",
     broker=_settings.rabbitmq_url,

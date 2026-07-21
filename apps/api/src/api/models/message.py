@@ -1,4 +1,4 @@
-"""Message model – Phase 1. One row per chat turn."""
+"""Message model - One row per chat turn."""
 
 from __future__ import annotations
 

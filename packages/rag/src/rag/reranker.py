@@ -1,11 +1,5 @@
 """
 Cross-encoder reranking via sentence-transformers.
-
-Hybrid retrieval (vector + full-text) is recall-oriented and produces a noisy
-candidate pool. A cross-encoder jointly encodes (query, chunk) and scores their
-relevance directly, which is far more precise than the first-stage similarity —
-so we use it to reorder candidates and keep the best top-k.
-
 Like the embedder, the model is heavy and CPU-bound, so instances are cached per
 model name and reused; call `rerank` inside a thread from async code.
 """

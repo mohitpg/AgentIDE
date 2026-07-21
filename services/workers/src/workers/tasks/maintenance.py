@@ -1,13 +1,6 @@
 """
 Scheduled maintenance tasks (run by Celery Beat).
 
-Phase 3 ships one placeholder: a periodic **registry health check** that asks the
-gateway how many specialist agents are currently live vs. registered and logs the
-result. It proves the Beat scheduler works and gives an obvious hook for later
-maintenance (reaping stale agents, cache warmup, re-index, …).
-
-It deliberately uses only the standard library (`urllib`) so the worker keeps its
-slim dependency set and never needs to import the API package.
 """
 
 from __future__ import annotations

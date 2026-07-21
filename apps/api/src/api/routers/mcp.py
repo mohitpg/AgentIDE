@@ -1,5 +1,5 @@
 """
-/mcp — MCP server registry + live capability discovery (Phase 6).
+/mcp — MCP server registry + live capability discovery.
 
 The settings-driven plug-in surface: register MCP servers and assign them to
 agents, no code changes. Agents read their assignments from here on startup and

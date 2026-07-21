@@ -3,12 +3,7 @@ A live connection to one MCP server.
 
 `connect_server(config)` opens the transport (stdio subprocess or SSE), performs
 the MCP `initialize` handshake, and returns an `MCPConnection` that can list and
-call tools. The connection owns an `AsyncExitStack`, so `aclose()` tears the
-transport (and any subprocess) down cleanly — connect and close must run in the
-same task, which the manager guarantees.
-
-Only the tool surface is wrapped here (Phase 6 exposes tools); resources/prompts
-can be added the same way later.
+call tools.
 """
 
 from __future__ import annotations

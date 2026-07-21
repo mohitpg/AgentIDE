@@ -1,14 +1,10 @@
 """
-Self-registration with the gateway agent registry (Phase 2).
+Self-registration with the gateway agent registry.
 
 On startup an agent POSTs its A2A Agent Card to ``${gateway_url}/agents/register``,
 then heartbeats every `heartbeat_seconds` so the registry knows it's live; on
 shutdown it deregisters. If the registry forgot it (e.g. the gateway restarted),
 a heartbeat that comes back 404 triggers a re-register.
-
-Every failure is logged and swallowed: an agent must keep serving A2A traffic
-even when the gateway/registry is unreachable. `RegistrationManager` is wired in
-by `create_agent_app` via the A2A app's Starlette lifespan.
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """
-Web-crawl tasks — bulk page fetching + extraction off the request path (Phase 5).
+Web-crawl tasks — bulk page fetching + extraction off the request path.
 
 The Web Search agent fetches a handful of pages inline for an interactive turn. A
 *heavy* crawl — many URLs, or one the caller wants to run in the background — is
@@ -9,8 +9,6 @@ lifecycle/progress over Redis pub/sub exactly like the indexing task, so the
 existing TaskEventHub persists the record and the UI Tasks panel renders live
 status with no new plumbing.
 
-Best-effort per URL: a single dead link is recorded as an error and the crawl
-continues, mirroring the graceful-degradation used everywhere else in the stack.
 """
 
 from __future__ import annotations

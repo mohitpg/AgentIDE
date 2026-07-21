@@ -65,12 +65,7 @@ def _validate_upload(data: bytes, settings: Settings) -> None:
 async def _resolve_session(
     db: AsyncSession, session_id: uuid.UUID | None
 ) -> uuid.UUID | None:
-    """Keep the session link only if that conversation exists.
-
-    Attachments are uploaded on Send, which may be the first message of a draft
-    chat not yet persisted — linking to a missing conversation would violate the
-    FK, so we drop the link rather than fail the upload (mirrors rag.py).
-    """
+    """Keep the session link only if that conversation exists"""
     if session_id is None:
         return None
     exists = await db.get(Conversation, session_id)
@@ -105,8 +100,6 @@ async def upload_image(
             session_id=session_id,
         )
     )
-    # Commit before returning so the row is visible to the immediate follow-up:
-    # the chat turn delegates to the Vision agent, which fetches GET /images/{id}.
     await db.commit()
 
     return ImageUploadResponse(

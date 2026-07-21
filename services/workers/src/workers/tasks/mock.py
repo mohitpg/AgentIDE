@@ -1,11 +1,10 @@
 """
-Mock long-running task — the Phase 3 vertical slice.
+Mock long-running task.
 
 `long_task` does nothing useful: it sleeps in steps and reports progress. It
 exists to prove the async path end-to-end (enqueue → worker → Redis pub/sub →
 API persists + streams → UI shows live progress and the final result) without
-needing any real workload. Phases 4-5 replace it with indexing / vision / web
-tasks that report progress the same way.
+needing any real workload. 
 
 The Celery task id is set by the gateway when it enqueues (`task_id=<row id>`),
 so `self.request.id` is exactly the `tasks` row id — every progress event lines

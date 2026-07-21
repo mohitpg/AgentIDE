@@ -1,5 +1,5 @@
 """
-/rag — document ingestion + hybrid retrieval (Phase 4).
+/rag — document ingestion + hybrid retrieval.
 
   POST   /rag/documents          upload → chunk → embed → store (synchronous)
   POST   /rag/documents/async     upload → enqueue Celery indexer → return a Task
@@ -75,12 +75,7 @@ def _safe_name(name: str) -> str:
 async def _resolve_session(
     db: AsyncSession, session_id: uuid.UUID | None
 ) -> uuid.UUID | None:
-    """Keep the optional chat-session link only if that conversation exists.
-
-    Uploads can come from a brand-new (draft) chat that hasn't been persisted
-    yet; linking to a non-existent conversation would violate the FK, so we drop
-    the link in that case rather than fail the upload.
-    """
+    """Keep the optional chat-session link only if that conversation exists."""
     if session_id is None:
         return None
     exists = await db.get(Conversation, session_id)

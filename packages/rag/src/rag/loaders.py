@@ -4,9 +4,6 @@ Document loaders — turn raw uploaded bytes into plain text.
 Base support:
   * PDF  → extracted page-by-page with `pypdf`
   * everything else (txt, md, source code, …) → decoded as UTF-8 (lossy)
-
-Richer formats (docx, html, notebooks) are deliberately left for later; the
-dispatch here is the single seam where they'd be added.
 """
 
 from __future__ import annotations
@@ -44,8 +41,6 @@ def extract_text(filename: str, content_type: str | None, data: bytes) -> str:
     if _is_pdf(filename, content_type):
         text = _extract_pdf(data)
     else:
-        # UTF-8 first; fall back to latin-1 which never fails, so arbitrary
-        # text/code files still index instead of erroring on a stray byte.
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError:

@@ -16,26 +16,22 @@ class GraphState(TypedDict):
     
     messages: Annotated[list[BaseMessage], add_messages]
 
-    # Which specialist agent was last routed to
+
     active_agent: str | None
 
-    # The supervisor's most recent decision (recomputed every loop pass)
-    # {"next": str, "skill": str | None, "input": dict, "reason": str}
-    # `next` is a known agent id, or "respond" to compose the final answer.
+
     route_decision: dict[str, Any] | None
 
-    # How many specialist (delegate) hops have run this turn — the supervisor
-    # loop's bound. Seeded to 0 each turn; incremented by `delegate_node`.
+
     step_count: int
 
-    # Execution mode for the turn: "auto" (supervisor decides), "agent" (prefer
-    # specialists), or "chat" (short-circuit straight to respond, no specialists).
+
     mode: str
 
     # Retrieved RAG context (populated by RAG node)
     rag_context: list[dict[str, Any]]
 
-    # Human-in-the-loop interrupt payload (Phase 7)
+    # Human-in-the-loop interrupt payload (tbd)
     pending_approval: dict[str, Any] | None
 
     # Run metadata

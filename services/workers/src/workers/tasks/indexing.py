@@ -1,5 +1,5 @@
 """
-Indexing tasks — load → chunk → embed → upsert into pgvector (Phase 4).
+Indexing tasks — load → chunk → embed → upsert into pgvector.
 
 `index_document` is the async ingestion path: the gateway stages an uploaded file
 on disk, creates a `tasks` row, and enqueues this task with the file path. The
@@ -7,9 +7,6 @@ worker reads the bytes, runs the shared `RagPipeline.ingest` (the same code the
 synchronous `/rag/documents` endpoint uses), and reports lifecycle/progress over
 Redis pub/sub exactly like the mock task — so the existing TaskEventHub persists
 the record and the UI Tasks panel renders live status with no new plumbing.
-
-The worker stays thin: it touches Postgres only for the vector upsert (its own
-short-lived async engine), never for task status — that flows through `publish`.
 """
 
 from __future__ import annotations

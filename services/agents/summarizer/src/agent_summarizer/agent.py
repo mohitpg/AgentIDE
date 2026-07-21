@@ -1,9 +1,6 @@
 """
 Summarizer agent.
 
-Declarative: identity + a skills directory of SKILL.md files
-(summarize-file, summarize-thread, tl;dr). Execution is the BaseAgent default
-LLM streaming, using each skill's Markdown body as its system prompt.
 """
 
 from __future__ import annotations

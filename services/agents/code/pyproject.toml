@@ -1,7 +1,7 @@
 [project]
 name = "agentide-agent-code"
 version = "0.1.0"
-description = "Code agent – generate, edit, refactor, explain, test (Phase 2)"
+description = "Code agent – generate, edit, refactor, explain, test"
 requires-python = ">=3.12"
 dependencies = [
     "agentide-agent-common",

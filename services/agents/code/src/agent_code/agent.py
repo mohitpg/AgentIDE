@@ -1,12 +1,6 @@
 """
 Code agent.
 
-Declarative identity + a skills directory of SKILL.md files (generate, edit,
-explain). Unlike pure-LLM specialists, the Code agent is an **MCP client**: on
-startup it connects its assigned MCP servers (filesystem + git by default) and,
-at run time, lets the model call those tools via `run_tool_loop`. With no tools
-available it falls back to the BaseAgent LLM-only streaming, so it still works
-when MCP is disabled or no servers are reachable.
 """
 
 from __future__ import annotations

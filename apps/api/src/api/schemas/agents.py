@@ -1,4 +1,4 @@
-"""Pydantic DTOs for the /agents registry API (Phase 2)."""
+"""Pydantic DTOs for the /agents registry API"""
 
 from __future__ import annotations
 

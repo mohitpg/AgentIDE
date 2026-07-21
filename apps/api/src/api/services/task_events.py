@@ -1,5 +1,5 @@
 """
-Task-event hub (Phase 3) — the bridge between Celery workers and the UI.
+Task-event hub — the bridge between Celery workers and the UI.
 
 Workers publish task progress onto a single Redis channel (see
 `workers.progress`). One `TaskEventHub`, started in the FastAPI lifespan, owns the
@@ -12,11 +12,8 @@ subscription and does two things for every event:
 
 This makes the gateway the single writer of task *status* transitions: the REST
 layer only creates the initial `pending` row and publishes a `revoked` event on
-cancel; all forward progress flows through here. The first terminal status wins,
-so a late `revoked`/`success` can't clobber an already-finished task.
+cancel; all forward progress flows through here.
 
-Degrades gracefully: if Redis drops, the listener logs and reconnects; a slow WS
-client is dropped from fan-out rather than blocking the hub.
 """
 
 from __future__ import annotations

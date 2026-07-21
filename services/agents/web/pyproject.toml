@@ -1,7 +1,7 @@
 [project]
 name = "agentide-agent-web"
 version = "0.1.0"
-description = "Web search agent – search, fetch, extract, synthesize (Phase 5)"
+description = "Web search agent – search, fetch, extract, synthesize"
 requires-python = ">=3.12"
 dependencies = [
     "agentide-agent-common",

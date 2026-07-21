@@ -1,7 +1,7 @@
 """
 Agent directory — maps an agent id to its A2A base URL.
 
-This is the *static* precursor to the Phase-2 Postgres+Redis agent registry: the
+This is the *static* precursor to the Postgres+Redis agent registry: the
 supervisor looks up where to send a delegated skill call. Swapping this for the
 registry later only changes how the map is populated, not how the graph uses it.
 """

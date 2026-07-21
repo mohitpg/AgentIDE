@@ -1,5 +1,5 @@
 """
-Agent registry model – Phase 2.
+Agent registry model
 
 One row per registered specialist agent. Stores the full A2A Agent Card (the
 document served at /.well-known/agent-card.json) plus a few denormalized columns
@@ -48,8 +48,6 @@ class AgentRegistration(Base, TimestampMixin):
     skill_ids: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
     tags: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
 
-    # Liveness: agents heartbeat periodically; a row older than the registry TTL
-    # is considered down.
     last_heartbeat: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

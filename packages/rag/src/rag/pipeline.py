@@ -7,10 +7,6 @@ Ties the pieces together:
   search(query)  → embed query → hybrid retrieve (vector + full-text)
                  → merge candidates → cross-encoder rerank → top-k
 
-CPU-bound model work (embedding, reranking) is dispatched to a thread so the
-async event loop stays free; DB work uses the injected `AsyncSession`. The
-embedder/reranker are optional in the constructor so tests can inject fakes and
-avoid the model downloads.
 """
 
 from __future__ import annotations

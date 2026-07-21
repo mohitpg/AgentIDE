@@ -10,9 +10,6 @@ Public surface:
   get_embedder / get_reranker   — cached model factories
   VectorStore                   — pgvector data-access (inject an AsyncSession)
 
-Implemented progressively across phases:
-  Phase 4 – chunking, embeddings, pgvector upsert, hybrid search, reranking
-  Phase 7 – semantic cache, embedding cache
 """
 
 from __future__ import annotations

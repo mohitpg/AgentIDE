@@ -1,4 +1,4 @@
-"""Pydantic DTOs for the /rag router (Phase 4)."""
+"""Pydantic DTOs for the /rag router"""
 
 from __future__ import annotations
 

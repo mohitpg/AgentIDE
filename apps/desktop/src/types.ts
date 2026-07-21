@@ -33,7 +33,7 @@ export interface SessionDetail extends Session {
   messages: Message[]
 }
 
-// ── Async tasks (Phase 3) ───────────────────────────────────────────────────
+// ── Async tasks ───────────────────────────────────────────────────
 export type TaskStatus =
   | 'pending'
   | 'started'
@@ -62,7 +62,7 @@ export interface Task {
 
 export const TASK_TERMINAL: TaskStatus[] = ['success', 'failure', 'revoked']
 
-// ── RAG (Phase 4) ───────────────────────────────────────────────────────────
+// ── RAG ───────────────────────────────────────────────────────────
 export interface RagDocument {
   id: string
   filename: string
@@ -95,7 +95,7 @@ export interface RagSearchResponse {
   hits: RagSearchHit[]
 }
 
-// ── MCP servers (Phase 6) ───────────────────────────────────────────────────
+// ── MCP servers ───────────────────────────────────────────────────
 export type MCPTransport = 'stdio' | 'sse'
 
 export interface MCPServer {

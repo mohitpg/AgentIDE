@@ -1,4 +1,4 @@
-"""Pydantic DTOs for the /tasks REST API (Phase 3)."""
+"""Pydantic DTOs for the /tasks REST API"""
 
 from __future__ import annotations
 

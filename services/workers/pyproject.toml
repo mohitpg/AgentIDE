@@ -9,8 +9,8 @@ dependencies = [
     "redis[hiredis]>=5.2",
     "agentide-schemas",
     "agentide-rag",
-    "agentide-agent-vision",  # reused by the vision queue task (Phase 5)
-    "agentide-agent-web",     # reused by the web-crawl queue task (Phase 5)
+    "agentide-agent-vision",  # reused by the vision queue task
+    "agentide-agent-web",     # reused by the web-crawl queue task
 ]
 
 [dependency-groups]

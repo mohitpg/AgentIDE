@@ -1,4 +1,4 @@
-"""Conversation (chat session) model – Phase 1."""
+"""Conversation (chat session) model"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class Conversation(Base, TimestampMixin):
         primary_key=True,
         default=uuid.uuid4,
     )
-    # Nullable until auth lands (Phase 7); scoped per-user once it does.
+
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),

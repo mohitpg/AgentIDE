@@ -1,5 +1,5 @@
 """
-agentide-mcp: MCP manager (Phase 6 — MCP extensibility).
+agentide-mcp: MCP manager.
 
 The plug-in surface for tools/resources. Adding a capability is config, not code:
 register an MCP server (filesystem, git, web-fetch, …) and assign it to agents.

@@ -1,4 +1,4 @@
-"""Phase 0 exit criterion: GET /health returns 200 with expected schema."""
+"""GET /health returns 200 with expected schema."""
 
 from __future__ import annotations
 

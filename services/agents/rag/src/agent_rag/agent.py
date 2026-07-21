@@ -4,13 +4,7 @@ RAG agent — retrieve → rerank → cite → answer.
 Unlike the Code/Summarizer agents (which use the default LLM-only `run`), this
 agent overrides `run` to first retrieve grounding context from pgvector via the
 shared `RagPipeline` (hybrid HNSW + full-text search, cross-encoder rerank), then
-answer with citations. Two skills:
-
-  answer    — synthesise an answer from the retrieved passages, citing [n].
-  retrieve  — return the ranked passages verbatim (no LLM synthesis).
-
-It is an independent A2A service, so it owns its own async DB engine (built lazily
-from DATABASE_URL) rather than importing anything from `apps/api`.
+answer with citations.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""User model – Phase 0 baseline."""
+"""User model"""
 
 from __future__ import annotations
 

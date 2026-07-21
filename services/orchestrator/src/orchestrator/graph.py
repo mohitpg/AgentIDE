@@ -1,6 +1,4 @@
 """
-Phase 1 graph: a single LLM node.
-
 START → agent → END
 
 The `agent` node calls the chat model with the system prompt prepended to the

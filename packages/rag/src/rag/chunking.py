@@ -1,10 +1,6 @@
 """
 Token-aware chunking with overlap.
 
-A sliding window over tokens is the standard RAG baseline: it keeps chunks at a
-predictable size for the embedder and overlaps neighbours so a passage split
-across a boundary is still retrievable from at least one chunk.
-
 Tokenisation is pluggable behind the `Tokenizer` protocol:
   * `TiktokenTokenizer` (default) — true BPE tokens via `tiktoken` (cl100k_base).
   * `WordTokenizer` — whitespace fallback, used when tiktoken can't load (e.g.

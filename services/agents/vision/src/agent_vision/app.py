@@ -6,8 +6,6 @@ Run standalone:
 or:
     python -m agent_vision
 
-Like the other agents it self-registers with the gateway when REGISTRY_ENABLED is
-set, so the supervisor can discover and delegate image work to it.
 """
 
 from __future__ import annotations

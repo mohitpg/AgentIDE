@@ -3,7 +3,7 @@ Orchestrator runtime: owns the compiled **supervisor graph** + LangGraph Postgre
 checkpointer and exposes a single streaming entry point used by the API's
 WebSocket handler.
 
-Phase 2: the graph is the supervisor (`build_supervisor_graph`) — it routes each
+The graph is the supervisor (`build_supervisor_graph`) — it routes each
 turn to a specialist A2A agent or answers inline. The supervisor's nodes emit the
 unified `StreamEvent`s directly via LangGraph's custom stream writer, so
 `stream_chat` simply forwards them; the API/UI render every agent's activity the

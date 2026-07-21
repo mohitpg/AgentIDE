@@ -6,14 +6,7 @@ overrides `run`: it accepts an image referenced in the turn text — either a st
 reference ``<Image at db.images.{id}>`` (minted by the gateway's ``POST /images``
 when the user attaches an image, resolved here via ``GET /images/{id}``) or a
 direct source (a data URI, an http(s) image URL, or a local image path) — builds a
-multimodal message, and streams a vision-capable model's response. Three skills:
-
-  analyze-image    — describe / analyse what the image shows.
-  ocr              — transcribe the text in the image verbatim.
-  diagram-to-code  — turn a diagram / mockup / screenshot into code.
-
-It is an independent A2A service. It defaults to a multimodal model (distinct from
-the stack's text default) via ``OPENROUTER_VISION_MODEL``.
+multimodal message, and streams a vision-capable model's response.
 """
 
 from __future__ import annotations

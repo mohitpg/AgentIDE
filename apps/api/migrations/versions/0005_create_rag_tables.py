@@ -4,7 +4,7 @@ Revision ID: 0005
 Revises: 0004
 Create Date: 2026-06-16 00:00:00.000000
 
-RAG storage for Phase 4. Two tables:
+RAG storage with two tables:
 
   rag_documents — one row per ingested document (metadata + chunk count).
   rag_chunks    — one row per chunk: content, a 384-dim `embedding` (HNSW,

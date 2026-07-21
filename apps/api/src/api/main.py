@@ -1,13 +1,4 @@
-"""
-FastAPI application entry point.
-
-Routers added here grow with each phase:
-  Phase 0 – /health
-  Phase 1 – /chat  /sessions
-  Phase 2 – /agents  /tasks
-  Phase 4 – /rag  /projects
-  Phase 6 – /mcp
-"""
+""" FastAPI application entry point. """
 
 from __future__ import annotations
 
@@ -15,9 +6,6 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager
 
-# psycopg's async pool (used by the LangGraph Postgres checkpointer) cannot run
-# on Windows' default ProactorEventLoop. Select the SelectorEventLoop before
-# uvicorn creates its loop. Must run before any event loop is started.
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -113,5 +101,4 @@ app.include_router(rag.router, prefix="/rag", tags=["rag"])
 app.include_router(images.router, prefix="/images", tags=["images"])
 app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
 
-# Phase 7+: uncomment as you implement each router
-# from api.routers import projects
+

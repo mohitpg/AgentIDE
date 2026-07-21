@@ -1,15 +1,5 @@
 """
 Uploaded image record — the disk ↔ DB mapping behind the chat image flow.
-
-When a user attaches an image and hits Send, the gateway (`POST /images`) stages
-the bytes on disk and inserts one row here, then hands the row id back as a compact
-reference ``<Image at db.images.{id}>`` embedded in the chat message. The Vision
-agent resolves that reference by fetching the bytes back over ``GET /images/{id}``;
-the UI uses the same endpoint to render the thumbnail. So the multi-KB blob never
-travels through chat or gets persisted in `messages` — only the reference does.
-
-Rows are scoped to the chat session and cascade-deleted with the conversation; the
-staged files are swept on session delete (`routers/sessions.delete_session`).
 """
 
 from __future__ import annotations

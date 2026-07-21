@@ -1,5 +1,5 @@
 """
-/tasks – async task API (Phase 3).
+/tasks – async task API.
 
 Long-running work runs off the request path on the Celery workers; this router is
 the gateway to it:
@@ -10,9 +10,6 @@ the gateway to it:
   POST   /tasks/{task_id}/cancel   request cancellation of a running task
   WS     /tasks/ws             live task progress (unified StreamEvents)
 
-Task *records* live in Postgres; live *progress* arrives over the WebSocket, fed
-by the `TaskEventHub` from worker-published Redis pub/sub. The two are independent
-of the chat WebSocket, so async tasks never block (or are blocked by) chat.
 """
 
 from __future__ import annotations
@@ -44,7 +41,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Logical task type → (Celery task name, queue, default kwargs, default label).
-# Phase 3 exposes only the mock task; Phases 4-5 add indexing/vision/web here.
 TASK_CATALOG: dict[str, dict] = {
     "mock": {
         "name": "workers.tasks.mock.long_task",
@@ -76,8 +72,6 @@ async def create_task(
         session_id=payload.session_id,
     )
     db.add(task)
-    # Commit before dispatch so the worker's first progress event always finds the
-    # row (the event listener reads it from a separate session).
     await db.commit()
     await db.refresh(task)
 

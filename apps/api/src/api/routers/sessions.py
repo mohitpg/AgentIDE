@@ -1,8 +1,6 @@
 """
 /sessions – conversation CRUD + history.
 
-Phase 1 has no auth yet, so sessions are not user-scoped. Phase 7 adds JWT and
-row-level scoping by `user_id` (the column already exists).
 """
 
 from __future__ import annotations
@@ -67,7 +65,5 @@ async def delete_session(
             Path(path).unlink()
 
     await db.delete(conversation)
-    # Commit here (like the other write routes) so the row is gone before the
-    # 204 returns; otherwise get_db's deferred commit races the client's refresh,
-    # making deletes lag by a click.
+    
     await db.commit()

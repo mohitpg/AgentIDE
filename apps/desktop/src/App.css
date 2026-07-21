@@ -717,7 +717,7 @@
   50% { opacity: 0.35; }
 }
 
-/* ── Tasks panel (Phase 3) ───────────────────────────────────────────────── */
+/* ── Tasks panel  ───────────────────────────────────────────────── */
 .tasks {
   width: 320px;
   flex-shrink: 0;
@@ -906,7 +906,7 @@
 }
 .task-cancel:hover { background: #2a1719; color: #f87171; }
 
-/* ── Inline citations in answers (Phase 4) ───────────────────────────────────── */
+/* ── Inline citations in answers ───────────────────────────────────── */
 .message-text { white-space: pre-wrap; }
 
 /* Markdown body: opt out of the bubble's pre-wrap so block layout renders normally.
@@ -974,7 +974,7 @@
 .citation-chip-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .citation-chip-chunk { color: #666; font-variant-numeric: tabular-nums; }
 
-/* ── Sources panel (Phase 4) ─────────────────────────────────────────────────── */
+/* ── Sources panel ─────────────────────────────────────────────────── */
 .docs {
   width: 300px;
   flex-shrink: 0;
@@ -1077,7 +1077,7 @@
   color: #777;
 }
 
-/* ── MCP servers panel (Phase 6) ───────────────────────────────────────────── */
+/* ── MCP servers panel ───────────────────────────────────────────── */
 .mcp {
   width: 340px;
   flex-shrink: 0;

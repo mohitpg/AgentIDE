@@ -19,7 +19,7 @@ dependencies = [
     "agentide-schemas",
     "agentide-orchestrator",
     "agentide-rag",
-    "agentide-mcp",                     # MCP server registry + live discovery (Phase 6)
+    "agentide-mcp",                     # MCP server registry + live discovery 
 ]
 
 [dependency-groups]

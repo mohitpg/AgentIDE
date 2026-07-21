@@ -70,7 +70,6 @@ celery_app.conf.update(
 )
 
 # ── Scheduled jobs (Celery Beat) ──────────────────────────────────────────────
-# Placeholder maintenance job; later phases add re-index / cache-warmup here.
 celery_app.conf.beat_schedule = {
     "registry-health-check": {
         "task": "workers.tasks.maintenance.registry_health_check",

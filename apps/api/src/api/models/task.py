@@ -1,19 +1,11 @@
 """
-Async task record — Phase 3.
+Async task record
 
 One row per job dispatched to the Celery workers (RabbitMQ broker, Redis result
 backend). The gateway creates the row (`status="pending"`) and enqueues the job
 with `task_id = row.id`, so the row id, the Celery task id, and every progress
 event's `task_id` are the same value.
 
-The row is then driven entirely by the task-event listener
-(`api.services.task_events.TaskEventHub`), which consumes progress published by
-the worker over Redis pub/sub and persists each transition here. This table is
-the durable record the `/tasks` REST API reads; the WebSocket is just the live
-push on top of it.
-
-`params`/`result` use a portable JSON variant (JSONB on Postgres) so the table
-can be created on SQLite in unit tests without a live database.
 """
 
 from __future__ import annotations
