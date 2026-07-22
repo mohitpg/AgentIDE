@@ -27,3 +27,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 contextBridge.exposeInMainWorld('api', {
   baseUrl: process.env['AGENTIDE_API_URL'] ?? 'http://localhost:8000',
 })
+
+// --------- Workspace folder picker (native OS dialog) ---------
+contextBridge.exposeInMainWorld('workspace', {
+  selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectFolder'),
+})

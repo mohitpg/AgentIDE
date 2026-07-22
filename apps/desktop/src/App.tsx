@@ -7,6 +7,7 @@ import McpPanel from './components/McpPanel'
 import SessionList from './components/SessionList'
 import TasksPanel from './components/TasksPanel'
 import TracePanel from './components/TracePanel'
+import WorkspaceChip from './components/WorkspaceChip'
 import { useChat } from './hooks/useChat'
 import { useDocuments } from './hooks/useDocuments'
 import { useMcp } from './hooks/useMcp'
@@ -78,14 +79,17 @@ function App(): JSX.Element {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-logo">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
-          </svg>
-          AgentIDE
-        </span>
+        <div className="app-header-left">
+          <span className="app-logo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+            AgentIDE
+          </span>
+          <WorkspaceChip />
+        </div>
         <div className="app-header-right">
           <button
             className={`panel-toggle ${showHistory ? 'on' : ''}`}

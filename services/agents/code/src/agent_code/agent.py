@@ -13,7 +13,7 @@ from agent_common.base import BaseAgent
 from agent_common.config import AgentSettings, get_agent_settings
 from agent_common.llm import build_chat_model
 from agent_common.mcp_tools import build_agent_manager, run_tool_loop
-from mcp_manager import MCPManager
+from mcp_manager import MCPManager, builtin_servers
 
 _SKILLS_DIR = Path(__file__).parent / "skills"
 
@@ -37,6 +37,10 @@ class CodeAgent(BaseAgent):
         # ours to connect and tear down.
         self._manager = mcp_manager
         self._owns_manager = mcp_manager is None
+        # Directory the filesystem/git tools are sandboxed to. Switchable at
+        # runtime via `set_workspace` (the gateway calls it when the user picks a
+        # new folder in the UI).
+        self._workspace = self._settings.mcp_workspace_dir or os.getcwd()
 
     @property
     def skills_dir(self) -> Path:
@@ -47,12 +51,11 @@ class CodeAgent(BaseAgent):
         if not self._settings.mcp_enabled:
             return
         if self._manager is None:
-            workspace = self._settings.mcp_workspace_dir or os.getcwd()
             self._manager = await build_agent_manager(
                 agent_id=self.id,
                 gateway_url=self._settings.gateway_url,
                 auth_token=self._settings.a2a_auth_token,
-                fallback_workspace=workspace,
+                fallback_workspace=self._workspace,
             )
         await self._manager.connect()
 
@@ -60,6 +63,24 @@ class CodeAgent(BaseAgent):
         if self._owns_manager and self._manager is not None:
             await self._manager.aclose()
             self._manager = None
+
+    async def set_workspace(self, workspace: str) -> None:
+        """Re-root the filesystem/git tools at ``workspace`` without a restart.
+
+        Rebuilds the built-in MCP servers scoped to the new directory and swaps
+        them in atomically: connect the replacement first, then tear down the old
+        one, so a bad path leaves the agent on its current (working) tools.
+        """
+        self._workspace = workspace
+        if not self._settings.mcp_enabled:
+            return
+        new_manager = MCPManager(builtin_servers(workspace))
+        await new_manager.connect()
+        old = self._manager
+        self._manager = new_manager
+        self._owns_manager = True
+        if old is not None:
+            await old.aclose()
 
     # ── execution ──────────────────────────────────────────────────────────────
     async def run(

@@ -192,3 +192,28 @@ export async function deleteMcpServer(id: string): Promise<void> {
 export async function discoverMcpServer(id: string): Promise<MCPDiscoverResponse> {
   return json(await fetch(`${API_BASE}/mcp/${id}/discover`, { method: 'POST' }))
 }
+
+// ── Workspace (current working directory) ────────────────────────────
+export interface Workspace {
+  path: string
+  name: string
+}
+
+export async function getWorkspace(): Promise<Workspace> {
+  return json(await fetch(`${API_BASE}/workspace`))
+}
+
+// Switch the agents' working directory. Rejects (400) if the path isn't a
+// directory the backend can see; the caller surfaces the message.
+export async function setWorkspace(path: string): Promise<Workspace> {
+  const res = await fetch(`${API_BASE}/workspace`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<Workspace>
+}

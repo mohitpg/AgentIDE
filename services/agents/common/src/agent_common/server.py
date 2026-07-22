@@ -18,6 +18,9 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from agent_common.base import BaseAgent
 from agent_common.config import AgentSettings, get_agent_settings
@@ -61,4 +64,21 @@ def create_agent_app(
         task_store=InMemoryTaskStore(),
     )
     app_builder = A2AStarletteApplication(agent_card=agent.card, http_handler=handler)
-    return app_builder.build(lifespan=_agent_lifespan(agent, settings))
+    app = app_builder.build(lifespan=_agent_lifespan(agent, settings))
+
+    async def set_workspace(request: Request) -> JSONResponse:
+        """POST /admin/workspace {"path": ...} — re-root the agent at runtime.
+
+        The gateway calls this on every live agent when the user switches folders;
+        agents that aren't directory-scoped inherit the no-op default and just ack.
+        """
+        data = await request.json()
+        path = (data or {}).get("path", "")
+        if not path:
+            return JSONResponse({"error": "path required"}, status_code=400)
+        await agent.set_workspace(path)
+        return JSONResponse({"ok": True, "workspace": path})
+
+    # Prepend so our exact-path route is matched before the A2A JSON-RPC handler.
+    app.router.routes.insert(0, Route("/admin/workspace", set_workspace, methods=["POST"]))
+    return app

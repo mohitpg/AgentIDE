@@ -449,10 +449,41 @@
 .upload-status.error { color: #f87171; }
 
 /* ── Header right cluster + trace toggle ─────────────────────────────────── */
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .app-header-right {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* ── Workspace (current folder) chip ─────────────────────────────────────── */
+.workspace-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  border: 1px solid #2a2a2a;
+  background: #1b1b1b;
+  color: #b9b9b9;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.workspace-chip:hover:not(:disabled) { background: #222; color: #eaeaea; }
+.workspace-chip:disabled { opacity: 0.6; cursor: default; }
+.workspace-chip svg { flex-shrink: 0; color: #7a7a7a; }
+.workspace-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-toggle {

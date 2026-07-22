@@ -23,3 +23,6 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
 electron.contextBridge.exposeInMainWorld("api", {
   baseUrl: process.env["AGENTIDE_API_URL"] ?? "http://localhost:8000"
 });
+electron.contextBridge.exposeInMainWorld("workspace", {
+  selectFolder: () => electron.ipcRenderer.invoke("dialog:selectFolder")
+});

@@ -72,6 +72,14 @@ class BaseAgent(ABC):
     async def ashutdown(self) -> None:
         """Called once when the A2A app stops. Mirror of `astartup`."""
 
+    async def set_workspace(self, workspace: str) -> None:
+        """Re-root the agent in ``workspace`` at runtime. Default: nothing.
+
+        Agents whose tools are scoped to a directory (e.g. the code agent's
+        filesystem/git MCP servers) override this to rebuild those tools against
+        the new path. Called by the gateway when the user switches folders.
+        """
+
     # ── A2A Agent Card ─────────────────────────────────────────────────────────
     @property
     def card(self) -> AgentCard:

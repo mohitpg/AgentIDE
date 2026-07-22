@@ -25,8 +25,8 @@ from mcp_manager import builtin_servers, connect_server
 from mcp_manager.config import MCPServerConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import get_settings
 from api.db.session import get_db
+from api.services.workspace import get_workspace
 from api.schemas.mcp import (
     MCPDiscoverResponse,
     MCPServerCreate,
@@ -62,7 +62,7 @@ async def create_server(
 @router.get("/builtins", response_model=list[MCPServerCreate])
 async def list_builtins() -> list[MCPServerCreate]:
     """Templates the settings UI can one-click register (filesystem/git/fetch)."""
-    workspace = get_settings().mcp_workspace_dir or "."
+    workspace = get_workspace()
     return [
         MCPServerCreate(**cfg.model_dump(mode="json")) for cfg in builtin_servers(workspace)
     ]

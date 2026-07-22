@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 //import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -63,6 +63,17 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
   }
+})
+
+// Native "Select Folder" dialog for the workspace switcher in the header.
+// Returns the chosen absolute path, or null if the user cancelled.
+ipcMain.handle('dialog:selectFolder', async (): Promise<string | null> => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select workspace folder',
+    properties: ['openDirectory', 'createDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
 })
 
 app.whenReady().then(createWindow)

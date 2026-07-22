@@ -25,4 +25,7 @@ declare namespace NodeJS {
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
   api: { baseUrl: string }
+  // Native folder picker exposed from preload; absent when running in a plain
+  // browser (the WorkspaceChip falls back to a typed-path prompt there).
+  workspace?: { selectFolder: () => Promise<string | null> }
 }

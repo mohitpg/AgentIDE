@@ -25,6 +25,7 @@ from api.routers import (  # noqa: E402
     rag,
     sessions,
     tasks,
+    workspace,
 )
 from api.services.registry import AgentRegistry  # noqa: E402
 from api.services.task_events import TaskEventHub  # noqa: E402
@@ -100,5 +101,6 @@ app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 app.include_router(rag.router, prefix="/rag", tags=["rag"])
 app.include_router(images.router, prefix="/images", tags=["images"])
 app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
+app.include_router(workspace.router, prefix="/workspace", tags=["workspace"])
 
 
