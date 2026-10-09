@@ -30,6 +30,12 @@ class Conversation(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     messages: Mapped[list[Message]] = relationship(

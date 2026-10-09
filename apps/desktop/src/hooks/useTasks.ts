@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { cancelTask, createTask, listTasks, TASKS_WS_URL, type CreateTaskBody } from '../lib/api'
+import {
+  refreshAccessToken,
+  socketAuthFrame,
+  WS_FORBIDDEN,
+  WS_UNAUTHORIZED,
+} from '../lib/auth'
 import type { StreamEvent, Task, TaskStatus } from '../types'
 
 export interface UseTasks {
@@ -72,7 +78,8 @@ export function useTasks(): UseTasks {
     [refresh],
   )
 
-  // Persistent WebSocket with simple reconnect (mirrors useChat).
+  // Persistent WebSocket with simple reconnect (mirrors useChat, including the
+  // first-frame auth: the server only streams this user + project's tasks).
   useEffect(() => {
     let closed = false
     let retry: ReturnType<typeof setTimeout>
@@ -81,13 +88,18 @@ export function useTasks(): UseTasks {
       const ws = new WebSocket(TASKS_WS_URL)
       wsRef.current = ws
       ws.onopen = () => {
+        ws.send(socketAuthFrame())
         setConnected(true)
         // Re-sync after a (re)connect in case we missed events while down.
         refresh()
       }
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         setConnected(false)
-        if (!closed) retry = setTimeout(connect, 1500)
+        if (closed || ev.code === WS_FORBIDDEN) return
+        const ready = ev.code === WS_UNAUTHORIZED ? refreshAccessToken() : Promise.resolve(null)
+        void ready.then(() => {
+          if (!closed) retry = setTimeout(connect, 1500)
+        })
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (ev) => applyEvent(JSON.parse(ev.data as string) as StreamEvent)

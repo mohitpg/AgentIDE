@@ -25,6 +25,19 @@ class Image(Base, TimestampMixin):
     path: Mapped[str] = mapped_column(Text, nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     # The chat session the image was uploaded for. Cascade so deleting a
     # conversation removes its image rows (the files are swept separately).
     session_id: Mapped[uuid.UUID | None] = mapped_column(

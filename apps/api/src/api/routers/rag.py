@@ -14,6 +14,9 @@ stages the file and hands indexing to the `indexing` Celery queue so large
 documents don't block the request — progress streams over `/tasks/ws` and the
 final result (document_id, num_chunks) lands on the Task record. The heavy
 embedder/reranker models load lazily on first use and are cached process-wide.
+
+Every endpoint is scoped to the caller's user + active project (`X-Project-Id`):
+documents are stored with that owner, and list/delete/search only ever see it.
 """
 
 from __future__ import annotations
@@ -36,12 +39,12 @@ from fastapi import (
     UploadFile,
     status,
 )
-from rag import RagConfig, RagPipeline, UnsupportedDocumentError
+from rag import RagConfig, RagPipeline, RagScope, UnsupportedDocumentError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import Settings, get_settings
 from api.db.session import get_db
-from api.models.conversation import Conversation
+from api.deps import Scope, get_scope, scoped_session_id
 from api.models.task import Task
 from api.schemas.rag import (
     IngestResponse,
@@ -72,14 +75,8 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120] or "document"
 
 
-async def _resolve_session(
-    db: AsyncSession, session_id: uuid.UUID | None
-) -> uuid.UUID | None:
-    """Keep the optional chat-session link only if that conversation exists."""
-    if session_id is None:
-        return None
-    exists = await db.get(Conversation, session_id)
-    return session_id if exists is not None else None
+def _rag_scope(scope: Scope) -> RagScope:
+    return RagScope(user_id=scope.user_id, project_id=scope.project_id)
 
 
 def _validate_upload(data: bytes, settings: Settings) -> None:
@@ -117,16 +114,18 @@ def get_pipeline() -> RagPipeline:
 async def upload_document(
     file: UploadFile = File(...),
     session_id: uuid.UUID | None = Form(default=None),
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
     pipeline: RagPipeline = Depends(get_pipeline),
 ) -> IngestResponse:
     data = await file.read()
     _validate_upload(data, get_settings())
-    session_id = await _resolve_session(db, session_id)
+    session_id = await scoped_session_id(db, scope, session_id)
 
     try:
         result = await pipeline.ingest(
             db,
+            scope=_rag_scope(scope),
             filename=file.filename or "document",
             content_type=file.content_type,
             data=data,
@@ -150,6 +149,7 @@ async def upload_document(
 async def upload_document_async(
     file: UploadFile = File(...),
     session_id: uuid.UUID | None = Form(default=None),
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
 ) -> Task:
     """
@@ -163,7 +163,7 @@ async def upload_document_async(
     settings = get_settings()
     data = await file.read()
     _validate_upload(data, settings)
-    session_id = await _resolve_session(db, session_id)
+    session_id = await scoped_session_id(db, scope, session_id)
 
     filename = file.filename or "document"
     task = Task(
@@ -177,6 +177,8 @@ async def upload_document_async(
             "byte_size": len(data),
         },
         session_id=session_id,
+        user_id=scope.user_id,
+        project_id=scope.project_id,
     )
     db.add(task)
     # Commit before dispatch so the worker's first progress event finds the row.
@@ -192,6 +194,9 @@ async def upload_document_async(
         "filename": filename,
         "content_type": file.content_type,
         "session_id": str(session_id) if session_id else None,
+        # The worker stores the document under the uploader's scope.
+        "user_id": str(scope.user_id),
+        "project_id": str(scope.project_id),
     }
     try:
         await asyncio.to_thread(
@@ -218,20 +223,22 @@ async def upload_document_async(
 
 @router.get("/documents", response_model=list[RagDocumentRead])
 async def list_documents(
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
     pipeline: RagPipeline = Depends(get_pipeline),
 ) -> list[RagDocumentRead]:
-    rows = await pipeline.store.list_documents(db)
+    rows = await pipeline.store.list_documents(db, _rag_scope(scope))
     return [RagDocumentRead(**row) for row in rows]
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: uuid.UUID,
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
     pipeline: RagPipeline = Depends(get_pipeline),
 ) -> None:
-    deleted = await pipeline.store.delete_document(db, document_id)
+    deleted = await pipeline.store.delete_document(db, document_id, _rag_scope(scope))
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
 
@@ -239,12 +246,14 @@ async def delete_document(
 @router.post("/search", response_model=RagSearchResponse)
 async def search(
     payload: RagSearchRequest,
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
     pipeline: RagPipeline = Depends(get_pipeline),
 ) -> RagSearchResponse:
     hits = await pipeline.search(
         db,
         payload.query,
+        scope=_rag_scope(scope),
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
     )

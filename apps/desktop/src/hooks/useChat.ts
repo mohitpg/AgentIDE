@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getSession, WS_URL } from '../lib/api'
+import {
+  refreshAccessToken,
+  socketAuthFrame,
+  WS_FORBIDDEN,
+  WS_UNAUTHORIZED,
+} from '../lib/auth'
 import { applyTraceEvent, type TraceRun } from '../lib/trace'
 import type { ChatMode, Message, StreamEvent } from '../types'
 
@@ -65,7 +71,8 @@ export function useChat(sessionId: string | null, opts: UseChatOptions = {}): Us
     }
   }, [sessionId])
 
-  // Persistent WebSocket with simple reconnect.
+  // Persistent WebSocket with simple reconnect. The first frame authenticates
+  // the socket for the signed-in user + active project.
   useEffect(() => {
     let closed = false
     let retry: ReturnType<typeof setTimeout>
@@ -74,10 +81,18 @@ export function useChat(sessionId: string | null, opts: UseChatOptions = {}): Us
       const ws = new WebSocket(WS_URL)
       wsRef.current = ws
 
-      ws.onopen = () => setConnected(true)
-      ws.onclose = () => {
+      ws.onopen = () => {
+        ws.send(socketAuthFrame())
+        setConnected(true)
+      }
+      ws.onclose = (ev) => {
         setConnected(false)
-        if (!closed) retry = setTimeout(connect, 1500)
+        if (closed || ev.code === WS_FORBIDDEN) return
+        // Expired token: refresh first, then reconnect with the new one.
+        const ready = ev.code === WS_UNAUTHORIZED ? refreshAccessToken() : Promise.resolve(null)
+        void ready.then(() => {
+          if (!closed) retry = setTimeout(connect, 1500)
+        })
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (ev) => handleEvent(JSON.parse(ev.data as string) as StreamEvent)

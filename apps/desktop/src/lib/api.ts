@@ -1,9 +1,12 @@
-// REST helpers + WebSocket URL for the chat backend.
+// REST helpers + WebSocket URL for the chat backend. Every call goes through
+// `authFetch`, which adds the bearer token and the active project (X-Project-Id).
 
+import { authFetch } from './auth'
 import type {
   IngestResponse,
   MCPDiscoverResponse,
   MCPServer,
+  Project,
   RagDocument,
   RagSearchResponse,
   Session,
@@ -21,21 +24,21 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export async function listSessions(): Promise<Session[]> {
-  return json(await fetch(`${API_BASE}/sessions`))
+  return json(await authFetch(`${API_BASE}/sessions`))
 }
 
 export async function getSession(id: string): Promise<SessionDetail> {
-  return json(await fetch(`${API_BASE}/sessions/${id}`))
+  return json(await authFetch(`${API_BASE}/sessions/${id}`))
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────
 export async function listTasks(): Promise<Task[]> {
-  return json(await fetch(`${API_BASE}/tasks`))
+  return json(await authFetch(`${API_BASE}/tasks`))
 }
 
 export interface CreateTaskBody {
@@ -47,7 +50,7 @@ export interface CreateTaskBody {
 
 export async function createTask(body: CreateTaskBody = {}): Promise<Task> {
   return json(
-    await fetch(`${API_BASE}/tasks`, {
+    await authFetch(`${API_BASE}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'mock', ...body }),
@@ -56,12 +59,12 @@ export async function createTask(body: CreateTaskBody = {}): Promise<Task> {
 }
 
 export async function cancelTask(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/tasks/${id}/cancel`, { method: 'POST' })
+  const res = await authFetch(`${API_BASE}/tasks/${id}/cancel`, { method: 'POST' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
 export async function getTask(id: string): Promise<Task> {
-  return json(await fetch(`${API_BASE}/tasks/${id}`))
+  return json(await authFetch(`${API_BASE}/tasks/${id}`))
 }
 
 // ── RAG ─────────────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ export async function uploadDocument(
   const form = new FormData()
   form.append('file', file)
   if (sessionId) form.append('session_id', sessionId)
-  const res = await fetch(`${API_BASE}/rag/documents`, { method: 'POST', body: form })
+  const res = await authFetch(`${API_BASE}/rag/documents`, { method: 'POST', body: form })
   if (!res.ok) {
     // Surface the backend's error detail (e.g. unsupported file, too large).
     const detail = await res.json().catch(() => null)
@@ -90,7 +93,7 @@ export async function uploadDocumentAsync(
   const form = new FormData()
   form.append('file', file)
   if (sessionId) form.append('session_id', sessionId)
-  const res = await fetch(`${API_BASE}/rag/documents/async`, { method: 'POST', body: form })
+  const res = await authFetch(`${API_BASE}/rag/documents/async`, { method: 'POST', body: form })
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
     throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
@@ -99,7 +102,7 @@ export async function uploadDocumentAsync(
 }
 
 export async function listDocuments(): Promise<RagDocument[]> {
-  return json(await fetch(`${API_BASE}/rag/documents`))
+  return json(await authFetch(`${API_BASE}/rag/documents`))
 }
 
 // ── Images (chat attachments) ─────────────────────────────────────────────────
@@ -119,7 +122,7 @@ export async function uploadImage(
   const form = new FormData()
   form.append('file', file)
   if (sessionId) form.append('session_id', sessionId)
-  const res = await fetch(`${API_BASE}/images`, { method: 'POST', body: form })
+  const res = await authFetch(`${API_BASE}/images`, { method: 'POST', body: form })
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
     throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
@@ -127,19 +130,22 @@ export async function uploadImage(
   return res.json() as Promise<ImageUploadResponse>
 }
 
-// URL that serves a stored image's bytes — used for message-bubble thumbnails.
-export function imageUrl(id: string): string {
-  return `${API_BASE}/images/${id}`
+// A stored image's bytes, fetched with auth (an <img src> can't send the bearer
+// token) — used for message-bubble thumbnails via an object URL.
+export async function fetchImage(id: string): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/images/${id}`)
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.blob()
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/rag/documents/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/rag/documents/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
 export async function searchRag(query: string, topK?: number): Promise<RagSearchResponse> {
   return json(
-    await fetch(`${API_BASE}/rag/search`, {
+    await authFetch(`${API_BASE}/rag/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, top_k: topK ?? null }),
@@ -154,15 +160,15 @@ export type MCPServerCreate = Pick<MCPServer, 'id'> &
 export type MCPServerUpdate = Partial<Omit<MCPServer, 'id' | 'created_at' | 'updated_at'>>
 
 export async function listMcpServers(): Promise<MCPServer[]> {
-  return json(await fetch(`${API_BASE}/mcp`))
+  return json(await authFetch(`${API_BASE}/mcp`))
 }
 
 export async function listMcpBuiltins(): Promise<MCPServerCreate[]> {
-  return json(await fetch(`${API_BASE}/mcp/builtins`))
+  return json(await authFetch(`${API_BASE}/mcp/builtins`))
 }
 
 export async function createMcpServer(body: MCPServerCreate): Promise<MCPServer> {
-  const res = await fetch(`${API_BASE}/mcp`, {
+  const res = await authFetch(`${API_BASE}/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -176,7 +182,7 @@ export async function createMcpServer(body: MCPServerCreate): Promise<MCPServer>
 
 export async function updateMcpServer(id: string, body: MCPServerUpdate): Promise<MCPServer> {
   return json(
-    await fetch(`${API_BASE}/mcp/${id}`, {
+    await authFetch(`${API_BASE}/mcp/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -185,12 +191,12 @@ export async function updateMcpServer(id: string, body: MCPServerUpdate): Promis
 }
 
 export async function deleteMcpServer(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/mcp/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${API_BASE}/mcp/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 }
 
 export async function discoverMcpServer(id: string): Promise<MCPDiscoverResponse> {
-  return json(await fetch(`${API_BASE}/mcp/${id}/discover`, { method: 'POST' }))
+  return json(await authFetch(`${API_BASE}/mcp/${id}/discover`, { method: 'POST' }))
 }
 
 // ── Workspace (current working directory) ────────────────────────────
@@ -200,13 +206,13 @@ export interface Workspace {
 }
 
 export async function getWorkspace(): Promise<Workspace> {
-  return json(await fetch(`${API_BASE}/workspace`))
+  return json(await authFetch(`${API_BASE}/workspace`))
 }
 
 // Switch the agents' working directory. Rejects (400) if the path isn't a
 // directory the backend can see; the caller surfaces the message.
 export async function setWorkspace(path: string): Promise<Workspace> {
-  const res = await fetch(`${API_BASE}/workspace`, {
+  const res = await authFetch(`${API_BASE}/workspace`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
@@ -216,4 +222,27 @@ export async function setWorkspace(path: string): Promise<Workspace> {
     throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
   }
   return res.json() as Promise<Workspace>
+}
+
+// ── Projects ──────────────────────────────────────────────────────────
+export async function listProjects(): Promise<Project[]> {
+  return json(await authFetch(`${API_BASE}/projects`))
+}
+
+export async function createProject(name: string): Promise<Project> {
+  return json(
+    await authFetch(`${API_BASE}/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  )
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/projects/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`)
+  }
 }

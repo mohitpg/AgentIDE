@@ -22,7 +22,7 @@ from rag.config import RagConfig
 from rag.embeddings import Embedder, get_embedder
 from rag.loaders import extract_text
 from rag.reranker import Reranker, apply_rerank, get_reranker
-from rag.store import Candidate, ChunkInput, VectorStore, merge_candidates
+from rag.store import Candidate, ChunkInput, RagScope, VectorStore, merge_candidates
 
 
 @dataclass
@@ -73,6 +73,7 @@ class RagPipeline:
         self,
         session: AsyncSession,
         *,
+        scope: RagScope,
         filename: str,
         content_type: str | None,
         data: bytes,
@@ -95,6 +96,7 @@ class RagPipeline:
 
         document_id = await self.store.add_document(
             session,
+            scope=scope,
             filename=filename,
             content_type=content_type,
             source=source,
@@ -124,17 +126,21 @@ class RagPipeline:
         session: AsyncSession,
         query: str,
         *,
+        scope: RagScope,
         top_k: int | None = None,
         candidate_k: int | None = None,
     ) -> list[SearchHit]:
+        """Search only the documents owned by ``scope`` (one user's one project)."""
         top_k = top_k or self.config.top_k
         candidate_k = candidate_k or self.config.candidate_k
 
         embedder = self._get_embedder()
         query_embedding = await asyncio.to_thread(embedder.embed_query, query)
 
-        vector_hits = await self.store.vector_search(session, query_embedding, candidate_k)
-        keyword_hits = await self.store.keyword_search(session, query, candidate_k)
+        vector_hits = await self.store.vector_search(
+            session, query_embedding, candidate_k, scope
+        )
+        keyword_hits = await self.store.keyword_search(session, query, candidate_k, scope)
         candidates: list[Candidate] = merge_candidates(vector_hits, keyword_hits)
         if not candidates:
             return []

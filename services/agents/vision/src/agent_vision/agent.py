@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from agent_common.base import BaseAgent
 from agent_common.config import get_agent_settings
 from agent_common.llm import LLMConfig, build_chat_model
+from agent_common.scope import current_scope
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 
 from agent_vision.images import (
@@ -98,13 +99,25 @@ class VisionAgent(BaseAgent):
         return _SKILLS_DIR
 
     async def _fetch_image(self, image_id: str) -> tuple[bytes, str]:
-        """Resolve a stored-image reference to (bytes, mime) via the gateway."""
+        """Resolve a stored-image reference to (bytes, mime) via the gateway.
+
+        Fetched on behalf of the requesting user (service token + their id), so
+        the gateway only serves images that user owns.
+        """
         if self._image_fetcher is not None:
             return await self._image_fetcher(image_id)
         import httpx
 
-        base = get_agent_settings().gateway_url.rstrip("/")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        req = current_scope()
+        if req is None:
+            raise PermissionError("no request scope; refusing to fetch images")
+        settings = get_agent_settings()
+        base = settings.gateway_url.rstrip("/")
+        headers = {
+            "Authorization": f"Bearer {settings.a2a_auth_token}",
+            "X-On-Behalf-Of": str(req.user_id),
+        }
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
             resp = await client.get(f"{base}/images/{image_id}")
             resp.raise_for_status()
             mime = resp.headers.get("content-type", "image/png").split(";")[0].strip()

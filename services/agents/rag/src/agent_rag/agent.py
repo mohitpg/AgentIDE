@@ -4,7 +4,8 @@ RAG agent — retrieve → rerank → cite → answer.
 Unlike the Code/Summarizer agents (which use the default LLM-only `run`), this
 agent overrides `run` to first retrieve grounding context from pgvector via the
 shared `RagPipeline` (hybrid HNSW + full-text search, cross-encoder rerank), then
-answer with citations.
+answer with citations. Retrieval is limited to the caller's project (the request
+scope the supervisor sends, see `agent_common.scope`).
 """
 
 from __future__ import annotations
@@ -16,8 +17,9 @@ from typing import TYPE_CHECKING
 
 from agent_common.base import BaseAgent
 from agent_common.llm import build_chat_model
+from agent_common.scope import current_scope
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
-from rag import RagConfig, RagPipeline, SearchHit
+from rag import RagConfig, RagPipeline, RagScope, SearchHit
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -70,6 +72,8 @@ _NO_CONTEXT = (
     "Try uploading a document first, or rephrasing the question."
 )
 
+_NO_SCOPE = "I can't search documents for this request: it didn't say which project to use."
+
 
 class RagAgent(BaseAgent):
     id = "rag"
@@ -112,10 +116,21 @@ class RagAgent(BaseAgent):
     async def run(
         self, skill_id: str, user_input: str, *, run_id: str = ""
     ) -> AsyncIterator[str]:
+        # Search only the caller's project. No scope (a request that didn't come
+        # through the supervisor) means nothing is searchable, never everything.
+        req = current_scope()
+        if req is None:
+            yield _NO_SCOPE
+            return
+
         cfg = self._pipeline.config
         async with self._session() as session:
             hits = await self._pipeline.search(
-                session, user_input, top_k=cfg.top_k, candidate_k=cfg.candidate_k
+                session,
+                user_input,
+                scope=RagScope(user_id=req.user_id, project_id=req.project_id),
+                top_k=cfg.top_k,
+                candidate_k=cfg.candidate_k,
             )
 
         if not hits:

@@ -94,6 +94,25 @@ async def test_unknown_task_id_is_ignored(hub, session_factory):
     await hub._persist(_event(uuid.uuid4(), status="progress", progress=10))
 
 
+async def test_events_fan_out_only_to_the_tasks_owner(hub, session_factory):
+    import json
+
+    alice, alice_proj, bob = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    tid = await _make_task(session_factory, user_id=alice, project_id=alice_proj)
+
+    mine = hub.subscribe(user_id=alice, project_id=alice_proj)
+    other_project = hub.subscribe(user_id=alice, project_id=uuid.uuid4())
+    other_user = hub.subscribe(user_id=bob, project_id=alice_proj)
+
+    await hub._handle(json.dumps(_event(tid, status="progress", progress=10)))
+    # Unknown task: no owner to route to, so nobody gets it.
+    await hub._handle(json.dumps(_event(uuid.uuid4(), status="progress", progress=10)))
+
+    assert mine.qsize() == 1
+    assert other_project.empty()
+    assert other_user.empty()
+
+
 async def test_malformed_event_is_dropped(hub):
     # _handle tolerates non-JSON without raising.
     await hub._handle("not json {")

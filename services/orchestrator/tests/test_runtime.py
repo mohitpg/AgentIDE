@@ -17,7 +17,7 @@ from schemas.events import EventType
 class _FakeA2AClient:
     """Yields one token + a done, mimicking an agent's A2A stream."""
 
-    async def stream(self, base_url, skill_id, input_data, run_id=None):
+    async def stream(self, base_url, skill_id, input_data, run_id=None, *, scope=None):
         yield {"type": "token", "data": {"content": "from agent"}}
         yield {"type": "done", "data": {"output": "from agent"}}
 
@@ -147,3 +147,23 @@ async def test_stream_chat_before_startup_raises() -> None:
     with pytest.raises(RuntimeError):
         async for _ in orch.stream_chat(content="hi", run_id="r", session_id="s", user_id="u"):
             pass
+
+
+@pytest.mark.asyncio
+async def test_delete_threads_is_best_effort() -> None:
+    """Deleted chats drop their checkpoints; one failure doesn't stop the rest."""
+
+    class _Saver:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        async def adelete_thread(self, thread_id: str) -> None:
+            if thread_id == "boom":
+                raise RuntimeError("db blip")
+            self.deleted.append(thread_id)
+
+    orch = Orchestrator(LLMConfig(api_key=""), "postgresql://unused")
+    await orch.delete_threads(["a"])  # no checkpointer yet: a no-op
+    orch._checkpointer = _Saver()
+    await orch.delete_threads(["a", "boom", "b"])
+    assert orch._checkpointer.deleted == ["a", "b"]

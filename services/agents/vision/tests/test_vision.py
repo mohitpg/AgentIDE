@@ -119,3 +119,43 @@ async def test_image_only_uses_skill_default_prompt() -> None:
     human = model.last_messages[1]
     text_block = next(b for b in human.content if b.get("type") == "text")
     assert "code" in text_block["text"].lower()
+
+
+async def test_gateway_fetch_acts_for_the_requesting_user(monkeypatch) -> None:
+    """Stored images are fetched on behalf of the supervisor-supplied user, so the
+    gateway only serves that user's own images."""
+    import uuid
+
+    import httpx
+    from agent_common.scope import RequestScope, reset_scope, set_scope
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.headers)
+        return httpx.Response(200, content=b"img", headers={"content-type": "image/png"})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+    user = uuid.uuid4()
+    agent = VisionAgent(chat_model=FakeChatModel([]))
+
+    token = set_scope(RequestScope(user_id=user, project_id=uuid.uuid4()))
+    try:
+        data, mime = await agent._fetch_image(_REF_ID)
+    finally:
+        reset_scope(token)
+
+    assert (data, mime) == (b"img", "image/png")
+    assert seen["x-on-behalf-of"] == str(user)
+
+
+async def test_gateway_fetch_refuses_without_a_scope() -> None:
+    import pytest
+
+    agent = VisionAgent(chat_model=FakeChatModel([]))
+    with pytest.raises(PermissionError):
+        await agent._fetch_image(_REF_ID)

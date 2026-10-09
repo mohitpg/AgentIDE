@@ -16,6 +16,10 @@ Retrieval runs two first-stage searches independently:
 
 `merge_candidates` unions them into one candidate pool (a chunk found by both
 keeps both rank signals) which the pipeline then reranks.
+
+Row scoping: every document belongs to a user + project (`RagScope`), and every
+read, search, and delete filters on both. There is deliberately no unscoped
+variant, so a caller can't forget the filter.
 """
 
 from __future__ import annotations
@@ -32,6 +36,22 @@ from rag.embeddings import Vector
 def _vec_literal(vector: Vector) -> str:
     """Format a vector as the pgvector text literal: '[0.1,0.2,...]'."""
     return "[" + ",".join(repr(float(x)) for x in vector) + "]"
+
+
+@dataclass(frozen=True)
+class RagScope:
+    """The owner of a document set: one user's one project."""
+
+    user_id: uuid.UUID
+    project_id: uuid.UUID
+
+
+# Appended to every query that touches rag_documents `d`.
+_SCOPE_SQL = "d.user_id = :scope_user AND d.project_id = :scope_project"
+
+
+def _scope_params(scope: RagScope) -> dict:
+    return {"scope_user": scope.user_id, "scope_project": scope.project_id}
 
 
 @dataclass
@@ -92,6 +112,7 @@ class VectorStore:
         self,
         session: AsyncSession,
         *,
+        scope: RagScope,
         filename: str,
         content_type: str | None,
         source: str,
@@ -104,14 +125,16 @@ class VectorStore:
             text(
                 """
                 INSERT INTO rag_documents
-                    (id, filename, content_type, source, session_id, byte_size, meta)
+                    (id, user_id, project_id, filename, content_type, source,
+                     session_id, byte_size, meta)
                 VALUES
-                    (:id, :filename, :content_type, :source, :session_id, :byte_size,
-                     CAST(:meta AS jsonb))
+                    (:id, :scope_user, :scope_project, :filename, :content_type,
+                     :source, :session_id, :byte_size, CAST(:meta AS jsonb))
                 """
             ),
             {
                 "id": doc_id,
+                **_scope_params(scope),
                 "filename": filename,
                 "content_type": content_type,
                 "source": source,
@@ -157,60 +180,67 @@ class VectorStore:
             {"n": len(chunks), "id": document_id},
         )
 
-    async def list_documents(self, session: AsyncSession) -> list[dict]:
+    async def list_documents(self, session: AsyncSession, scope: RagScope) -> list[dict]:
         result = await session.execute(
             text(
-                """
+                f"""
                 SELECT id, filename, content_type, source, session_id,
                        num_chunks, byte_size, created_at
-                FROM rag_documents
+                FROM rag_documents d
+                WHERE {_SCOPE_SQL}
                 ORDER BY created_at DESC
                 """
-            )
+            ),
+            _scope_params(scope),
         )
         return [dict(r) for r in result.mappings().all()]
 
-    async def delete_document(self, session: AsyncSession, document_id: uuid.UUID) -> bool:
+    async def delete_document(
+        self, session: AsyncSession, document_id: uuid.UUID, scope: RagScope
+    ) -> bool:
         result = await session.execute(
-            text("DELETE FROM rag_documents WHERE id = :id"),
-            {"id": document_id},
+            text(f"DELETE FROM rag_documents d WHERE d.id = :id AND {_SCOPE_SQL}"),
+            {"id": document_id, **_scope_params(scope)},
         )
         return result.rowcount > 0
 
     async def vector_search(
-        self, session: AsyncSession, query_embedding: Vector, limit: int
+        self, session: AsyncSession, query_embedding: Vector, limit: int, scope: RagScope
     ) -> list[Candidate]:
+        # The scope filter runs after the HNSW scan, so a project holding a small
+        # share of all chunks can get fewer than `limit` candidates back.
         result = await session.execute(
             text(
-                """
+                f"""
                 SELECT c.id, c.document_id, c.chunk_index, c.content, d.filename,
                        1 - (c.embedding <=> CAST(:qv AS vector)) AS score
                 FROM rag_chunks c
                 JOIN rag_documents d ON d.id = c.document_id
+                WHERE {_SCOPE_SQL}
                 ORDER BY c.embedding <=> CAST(:qv AS vector)
                 LIMIT :limit
                 """
             ),
-            {"qv": _vec_literal(query_embedding), "limit": limit},
+            {"qv": _vec_literal(query_embedding), "limit": limit, **_scope_params(scope)},
         )
         return [_row_to_candidate(dict(r), "vector", r["score"]) for r in result.mappings()]
 
     async def keyword_search(
-        self, session: AsyncSession, query: str, limit: int
+        self, session: AsyncSession, query: str, limit: int, scope: RagScope
     ) -> list[Candidate]:
         result = await session.execute(
             text(
-                """
+                f"""
                 SELECT c.id, c.document_id, c.chunk_index, c.content, d.filename,
                        ts_rank_cd(c.tsv, plainto_tsquery('english', :q)) AS score
                 FROM rag_chunks c
                 JOIN rag_documents d ON d.id = c.document_id
-                WHERE c.tsv @@ plainto_tsquery('english', :q)
+                WHERE c.tsv @@ plainto_tsquery('english', :q) AND {_SCOPE_SQL}
                 ORDER BY score DESC
                 LIMIT :limit
                 """
             ),
-            {"q": query, "limit": limit},
+            {"q": query, "limit": limit, **_scope_params(scope)},
         )
         return [_row_to_candidate(dict(r), "keyword", r["score"]) for r in result.mappings()]
 

@@ -59,6 +59,7 @@ class Orchestrator:
         self._directory = AgentDirectory.from_env()
         self._pool = None  # type: ignore[var-annotated]
         self._graph = None  # type: ignore[var-annotated]
+        self._checkpointer = None  # type: ignore[var-annotated]
 
     async def startup(self) -> None:
         # Lazy import: keeps `orchestrator` importable (and unit-testable with an
@@ -70,6 +71,7 @@ class Orchestrator:
         general_system = system_message(self._llm_config)
         client = A2AAgentClient(auth_token=self._auth_token)
         checkpointer = await self._build_checkpointer()
+        self._checkpointer = checkpointer
         self._graph = build_supervisor_graph(
             router_model=router_model,
             general_model=general_model,
@@ -115,6 +117,21 @@ class Orchestrator:
             await self._pool.close()
             self._pool = None
 
+    async def delete_threads(self, thread_ids: list[str]) -> None:
+        """Drop the checkpointed state of deleted conversations (best-effort).
+
+        Checkpoints are keyed by session id and would otherwise outlive the
+        conversation: deleted chat content would linger, and a later session
+        reusing that id would have the old history restored into it.
+        """
+        if self._checkpointer is None:
+            return
+        for thread_id in thread_ids:
+            try:
+                await self._checkpointer.adelete_thread(thread_id)
+            except Exception as exc:  # DB blip — the row delete already happened
+                logger.warning("failed to delete checkpoint thread %s: %s", thread_id, exc)
+
     async def _refresh_directory(self) -> None:
         """Pull the live agent set from the registry into the shared directory."""
         if self._directory_provider is None:
@@ -136,6 +153,7 @@ class Orchestrator:
         run_id: str,
         session_id: str,
         user_id: str,
+        project_id: str = "",
         mode: str = "auto",
     ) -> AsyncIterator[object]:
         """
@@ -145,7 +163,8 @@ class Orchestrator:
         message, which the reducer appends to that restored history. `mode`
         ("auto"|"agent"|"chat") and `step_count` are per-turn scalars with no
         reducer, so the values seeded here overwrite whatever the checkpoint
-        restored, scoping them to this turn.
+        restored, scoping them to this turn. `user_id` / `project_id` are the
+        caller's row scope, handed to every specialist the turn delegates to.
 
         Forwards the supervisor's StreamEvents (agent_step / token / done / error)
         as they are emitted, stamping `duration_ms` onto the terminal `done`.
@@ -171,6 +190,7 @@ class Orchestrator:
             "run_id": run_id,
             "session_id": session_id,
             "user_id": user_id,
+            "project_id": project_id,
             # Per-turn loop scalars (no reducer ⇒ these overwrite the restored
             # checkpoint values, scoping them to this turn). Specialist outputs are
             # no longer tracked in a separate buffer — they live in `messages`.

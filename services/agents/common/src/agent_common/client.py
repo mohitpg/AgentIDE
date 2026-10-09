@@ -57,12 +57,16 @@ class A2AAgentClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._auth_token}"} if self._auth_token else {}
 
-    def _build_message(self, text: str, skill_id: str) -> Message:
+    def _build_message(
+        self, text: str, skill_id: str, scope: dict[str, str] | None = None
+    ) -> Message:
         return Message(
             role=Role.user,
             parts=[Part(root=TextPart(text=text))],
             message_id=str(uuid.uuid4()),
-            metadata={"skill_id": skill_id},
+            # `user_id` / `project_id` become the agent's row scope
+            # (`agent_common.scope`); the bearer token is what makes them trusted.
+            metadata={"skill_id": skill_id, **(scope or {})},
         )
 
     async def stream(
@@ -71,10 +75,12 @@ class A2AAgentClient:
         skill_id: str,
         input_data: dict[str, Any],
         run_id: str | None = None,
+        *,
+        scope: dict[str, str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         # The supervisor packs the turn text under a single key; send it as-is.
         text = input_data.get("text") or next(iter(input_data.values()), "")
-        message = self._build_message(text, skill_id)
+        message = self._build_message(text, skill_id, scope)
         request = SendStreamingMessageRequest(
             id=run_id or str(uuid.uuid4()),
             params=MessageSendParams(message=message),

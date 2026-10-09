@@ -1308,3 +1308,208 @@
 }
 .mcp-tool-empty { font-size: 0.7rem; color: #777; }
 .mcp-tool-error { font-size: 0.7rem; color: #f87171; }
+
+/* ── Sign-in + splash ────────────────────────────────────────────────────── */
+.splash {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #777;
+  font-size: 0.85rem;
+}
+
+.login {
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.login-card {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 28px;
+  border: 1px solid #1f1f1f;
+  border-radius: 14px;
+  background: #141414;
+}
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #fff;
+}
+.login-sub { margin: 0 0 8px; color: #888; font-size: 0.85rem; }
+.login-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #2a2a2a;
+  background: #1b1b1b;
+  color: #e5e5e5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.login-google:hover:not(:disabled) { background: #222; }
+.login-google:disabled { opacity: 0.5; cursor: default; }
+.login-hint { margin: 0; color: #888; font-size: 0.8rem; text-align: center; }
+.login-error { margin: 0; color: #ef4444; font-size: 0.8rem; text-align: center; }
+
+/* ── Header dropdowns (project switcher, account) ────────────────────────── */
+/* .dropdown-menu opens upward for the composer; header menus open downward. */
+.dropdown-menu.dropdown-menu-down { bottom: auto; top: calc(100% + 6px); }
+.dropdown-menu.dropdown-menu-right { left: auto; right: 0; }
+
+.chip-caret { color: #666; font-size: 0.7rem; }
+
+.menu-label {
+  padding: 8px 10px 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+  font-weight: 600;
+}
+.menu-error { padding: 4px 10px 8px; color: #ef4444; font-size: 0.75rem; }
+
+.project-menu { min-width: 240px; max-width: 320px; padding: 4px; }
+.project-item {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.project-item:hover { background: #222; }
+.project-item.active { background: #232336; }
+.project-item-name {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: #ddd;
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-item.active .project-item-name { color: #c7c9ff; }
+.project-item-delete {
+  border: none;
+  background: none;
+  color: #666;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  opacity: 0;
+}
+.project-item:hover .project-item-delete { opacity: 1; }
+.project-item-delete:hover { color: #ef4444; }
+
+.project-new {
+  display: flex;
+  gap: 6px;
+  padding: 6px 4px 4px;
+  margin-top: 4px;
+  border-top: 1px solid #2a2a2a;
+}
+.project-new input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #2a2a2a;
+  background: #141414;
+  color: #e5e5e5;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.8rem;
+}
+.project-new button {
+  border: 1px solid #3a3a5a;
+  background: #232336;
+  color: #c7c9ff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.project-new button:disabled { opacity: 0.4; cursor: default; }
+
+.user-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #2a2a2a;
+  background: #232336;
+  color: #c7c9ff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.user-chip img { width: 100%; height: 100%; object-fit: cover; }
+
+.user-menu { min-width: 220px; padding: 8px; gap: 2px; }
+.user-menu-name { color: #eee; font-size: 0.85rem; font-weight: 500; padding: 2px 4px; }
+.user-menu-email {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #888;
+  font-size: 0.75rem;
+  padding: 0 4px 8px;
+  overflow-wrap: anywhere;
+}
+.user-menu-badge {
+  border: 1px solid #3a3a5a;
+  color: #c7c9ff;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.user-menu-signout {
+  border: 1px solid #2a2a2a;
+  background: #1b1b1b;
+  color: #ddd;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+.user-menu-signout:hover { background: #222; color: #ef4444; }
+
+/* Thumbnail placeholder while the authed image fetch is in flight. */
+.message-image-pending {
+  display: inline-block;
+  width: 120px;
+  height: 90px;
+  background: #1b1b1b;
+}.login-retry {
+  border: none;
+  background: none;
+  color: #8b8dff;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+}
+.login-retry:hover { text-decoration: underline; }

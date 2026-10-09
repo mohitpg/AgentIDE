@@ -11,11 +11,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from rag.config import RagConfig
 from rag.embeddings import Vector
 from rag.pipeline import RagPipeline
-from rag.store import Candidate, ChunkInput, merge_candidates
+from rag.store import Candidate, ChunkInput, RagScope, VectorStore, merge_candidates
+
+SCOPE = RagScope(user_id=uuid.uuid4(), project_id=uuid.uuid4())
 
 
 class FakeEmbedder:
@@ -44,6 +45,7 @@ class FakeStore:
         self.chunks: list[ChunkInput] = []
         self._vector_hits = vector_hits or []
         self._keyword_hits = keyword_hits or []
+        self.search_scopes: list[RagScope] = []
 
     async def add_document(self, session, **kwargs) -> uuid.UUID:  # type: ignore[no-untyped-def]
         doc_id = uuid.uuid4()
@@ -53,10 +55,12 @@ class FakeStore:
     async def add_chunks(self, session, document_id, chunks) -> None:  # type: ignore[no-untyped-def]
         self.chunks.extend(chunks)
 
-    async def vector_search(self, session, query_embedding, limit):  # type: ignore[no-untyped-def]
+    async def vector_search(self, session, query_embedding, limit, scope):  # type: ignore[no-untyped-def]
+        self.search_scopes.append(scope)
         return self._vector_hits[:limit]
 
-    async def keyword_search(self, session, query, limit):  # type: ignore[no-untyped-def]
+    async def keyword_search(self, session, query, limit, scope):  # type: ignore[no-untyped-def]
+        self.search_scopes.append(scope)
         return self._keyword_hits[:limit]
 
 
@@ -84,7 +88,7 @@ async def test_ingest_chunks_embeds_and_stores() -> None:
     data = (" ".join(f"word{i}" for i in range(25))).encode()
 
     result = await pipeline.ingest(
-        None, filename="notes.txt", content_type="text/plain", data=data  # type: ignore[arg-type]
+        None, scope=SCOPE, filename="notes.txt", content_type="text/plain", data=data  # type: ignore[arg-type]
     )
 
     assert result.num_chunks > 1
@@ -108,7 +112,7 @@ async def test_search_merges_and_reranks_top_k() -> None:
         store=store,
     )
 
-    hits = await pipeline.search(None, "quick brown fox")  # type: ignore[arg-type]
+    hits = await pipeline.search(None, "quick brown fox", scope=SCOPE)  # type: ignore[arg-type]
 
     assert len(hits) == 2  # top_k honoured
     # the chunk containing all query terms reranks first
@@ -118,7 +122,7 @@ async def test_search_merges_and_reranks_top_k() -> None:
 
 async def test_search_empty_corpus_returns_nothing() -> None:
     pipeline = RagPipeline(embedder=FakeEmbedder(), reranker=FakeReranker(), store=FakeStore())
-    assert await pipeline.search(None, "anything") == []  # type: ignore[arg-type]
+    assert await pipeline.search(None, "anything", scope=SCOPE) == []  # type: ignore[arg-type]
 
 
 def test_merge_candidates_dedupes_and_folds_scores() -> None:
@@ -136,10 +140,61 @@ def test_merge_candidates_dedupes_and_folds_scores() -> None:
     assert set(folded.sources) == {"vector", "keyword"}
 
 
+async def test_ingest_and_search_carry_the_scope() -> None:
+    store = FakeStore(vector_hits=[_candidate("x", source="vector")])
+    pipeline = RagPipeline(embedder=FakeEmbedder(), reranker=FakeReranker(), store=store)
+
+    await pipeline.ingest(
+        None, scope=SCOPE, filename="a.txt", content_type="text/plain", data=b"hello world"  # type: ignore[arg-type]
+    )
+    await pipeline.search(None, "x", scope=SCOPE)  # type: ignore[arg-type]
+
+    assert store.documents[0]["scope"] == SCOPE
+    assert store.search_scopes == [SCOPE, SCOPE]  # both retrievers
+
+
+class RecordingSession:
+    """Captures the SQL + params VectorStore sends; returns no rows."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    async def execute(self, statement, params=None):  # type: ignore[no-untyped-def]
+        self.calls.append((str(statement), params or {}))
+
+        class _Result:
+            rowcount = 0
+
+            def mappings(self):  # type: ignore[no-untyped-def]
+                class _M(list):
+                    def all(self):  # type: ignore[no-untyped-def]
+                        return list(self)
+
+                return _M()
+
+        return _Result()
+
+
+async def test_every_store_read_filters_by_user_and_project() -> None:
+    store = VectorStore()
+    session = RecordingSession()
+
+    await store.list_documents(session, SCOPE)  # type: ignore[arg-type]
+    await store.delete_document(session, uuid.uuid4(), SCOPE)  # type: ignore[arg-type]
+    await store.vector_search(session, [0.1, 0.2], 5, SCOPE)  # type: ignore[arg-type]
+    await store.keyword_search(session, "q", 5, SCOPE)  # type: ignore[arg-type]
+
+    assert len(session.calls) == 4
+    for sql, params in session.calls:
+        assert "d.user_id = :scope_user AND d.project_id = :scope_project" in sql
+        assert params["scope_user"] == SCOPE.user_id
+        assert params["scope_project"] == SCOPE.project_id
+
+
 @pytest.mark.parametrize("bad", [b"", b"   "])
 async def test_ingest_rejects_empty_documents(bad: bytes) -> None:
     pipeline = RagPipeline(embedder=FakeEmbedder(), reranker=FakeReranker(), store=FakeStore())
     with pytest.raises(Exception):
         await pipeline.ingest(
-            None, filename="empty.txt", content_type="text/plain", data=bad  # type: ignore[arg-type]
+            None, scope=SCOPE, filename="empty.txt", content_type="text/plain", data=bad  # type: ignore[arg-type]
         )

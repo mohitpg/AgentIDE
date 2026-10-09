@@ -33,7 +33,8 @@ async def sqlite_factory():
 
 
 @pytest.fixture
-async def client(sqlite_factory, tmp_path, monkeypatch):
+async def client(sqlite_factory, tmp_path, monkeypatch, auth):
+    auth.as_user(auth.make_user())
     # Stage uploads under tmp_path instead of the system temp dir.
     monkeypatch.setattr(
         "api.routers.images.get_settings",
@@ -67,6 +68,22 @@ async def test_upload_returns_reference_and_serves_bytes(client):
     assert got.status_code == 200
     assert got.content == data
     assert got.headers["content-type"].startswith("image/png")
+
+
+async def test_images_are_private_to_their_uploader(client, auth):
+    owner = auth.make_user()
+    auth.as_user(owner)
+    body = (
+        await client.post("/images", files={"file": ("a.png", b"\x89PNG data", "image/png")})
+    ).json()
+
+    # Another user gets a 404 (not a 403, so the id's existence isn't confirmed).
+    auth.as_user(auth.make_user())
+    assert (await client.get(f"/images/{body['id']}")).status_code == 404
+
+    # The owner can view it from any of their projects (history thumbnails).
+    auth.as_user(owner)
+    assert (await client.get(f"/images/{body['id']}")).status_code == 200
 
 
 async def test_get_unknown_image_404(client):

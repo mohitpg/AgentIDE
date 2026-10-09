@@ -1,5 +1,13 @@
 // Mirrors apps/api DTOs and packages/schemas StreamEvent.
 
+// A project scopes all user data (chats, tasks, uploads, indexed docs).
+export interface Project {
+  id: string
+  name: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Session {
   id: string
   title: string | null

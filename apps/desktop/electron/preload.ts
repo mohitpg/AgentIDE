@@ -28,6 +28,13 @@ contextBridge.exposeInMainWorld('api', {
   baseUrl: process.env['AGENTIDE_API_URL'] ?? 'http://localhost:8000',
 })
 
+// --------- Google sign-in (flow + refresh token live in the main process) ---------
+contextBridge.exposeInMainWorld('auth', {
+  login: () => ipcRenderer.invoke('auth:login'),
+  refresh: () => ipcRenderer.invoke('auth:refresh'),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+})
+
 // --------- Workspace folder picker (native OS dialog) ---------
 contextBridge.exposeInMainWorld('workspace', {
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectFolder'),

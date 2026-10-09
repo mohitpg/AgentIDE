@@ -23,6 +23,11 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
 electron.contextBridge.exposeInMainWorld("api", {
   baseUrl: process.env["AGENTIDE_API_URL"] ?? "http://localhost:8000"
 });
+electron.contextBridge.exposeInMainWorld("auth", {
+  login: () => electron.ipcRenderer.invoke("auth:login"),
+  refresh: () => electron.ipcRenderer.invoke("auth:refresh"),
+  logout: () => electron.ipcRenderer.invoke("auth:logout")
+});
 electron.contextBridge.exposeInMainWorld("workspace", {
   selectFolder: () => electron.ipcRenderer.invoke("dialog:selectFolder")
 });

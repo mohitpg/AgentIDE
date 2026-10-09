@@ -29,7 +29,13 @@ class A2AStreamClient(Protocol):
     """Just the slice of A2AClient the delegate needs (duck-typed for tests)."""
 
     def stream(
-        self, base_url: str, skill_id: str, input_data: dict[str, Any], run_id: str | None = ...
+        self,
+        base_url: str,
+        skill_id: str,
+        input_data: dict[str, Any],
+        run_id: str | None = ...,
+        *,
+        scope: dict[str, str] | None = ...,
     ): ...
 
 
@@ -50,9 +56,13 @@ class DelegateNode:
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": agent_id, "node": "delegate", "phase": "enter", "skill": skill}))
 
+        # The caller's row scope: agents that touch user data (RAG search, Vision
+        # image fetch) only ever act within it.
+        scope = {"user_id": state.get("user_id", ""), "project_id": state.get("project_id", "")}
+
         text, index, result = "", 0, {}
         try:
-            async for ev in self._client.stream(base_url, skill, payload, run_id):
+            async for ev in self._client.stream(base_url, skill, payload, run_id, scope=scope):
                 if ev.get("type") == "token":
                     piece = ev["data"].get("content", "")
                     text += piece

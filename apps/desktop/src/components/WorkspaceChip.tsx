@@ -4,8 +4,9 @@ import { getWorkspace, setWorkspace, type Workspace } from '../lib/api'
 
 // The current-folder chip in the header. Shows the workspace folder name; click
 // to switch it — via the native OS folder picker in Electron, or a typed-path
-// prompt when that bridge isn't available (e.g. the in-app browser).
-function WorkspaceChip(): JSX.Element {
+// prompt when that bridge isn't available (e.g. the in-app browser). The folder
+// is host-wide (shared by every user's agents), so only admins can switch it.
+function WorkspaceChip({ canChange }: { canChange: boolean }): JSX.Element {
   const [workspace, setWs] = useState<Workspace | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -17,7 +18,7 @@ function WorkspaceChip(): JSX.Element {
   }, [])
 
   const pickFolder = async (): Promise<void> => {
-    if (busy) return
+    if (busy || !canChange) return
     setError(null)
     // Prefer the native dialog; fall back to typing a path in a plain browser.
     let chosen: string | null = null
@@ -44,9 +45,14 @@ function WorkspaceChip(): JSX.Element {
     <button
       className="workspace-chip"
       onClick={pickFolder}
-      disabled={busy}
-      title={error ?? workspace?.path ?? 'Select workspace folder'}
-      aria-label={`Workspace: ${label}. Click to change.`}
+      disabled={busy || !canChange}
+      title={
+        error ??
+        (canChange
+          ? workspace?.path ?? 'Select workspace folder'
+          : `${workspace?.path ?? ''} (only an admin can change the workspace)`)
+      }
+      aria-label={`Workspace: ${label}.${canChange ? ' Click to change.' : ''}`}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

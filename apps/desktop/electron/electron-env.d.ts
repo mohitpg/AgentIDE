@@ -28,4 +28,11 @@ interface Window {
   // Native folder picker exposed from preload; absent when running in a plain
   // browser (the WorkspaceChip falls back to a typed-path prompt there).
   workspace?: { selectFolder: () => Promise<string | null> }
+  // Google sign-in bridge (preload → main). Absent in a plain browser, where
+  // sign-in isn't possible. `refresh` resolves null once the session is over.
+  auth?: {
+    login: () => Promise<import('./auth').AuthSession>
+    refresh: () => Promise<import('./auth').AuthSession | null>
+    logout: () => Promise<void>
+  }
 }

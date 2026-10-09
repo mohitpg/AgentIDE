@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from contextlib import asynccontextmanager
 
@@ -18,10 +19,12 @@ from api.db.redis import redis_client  # noqa: E402
 from api.db.session import AsyncSessionLocal, engine  # noqa: E402
 from api.routers import (  # noqa: E402
     agents,
+    auth,
     chat,
     health,
     images,
     mcp,
+    projects,
     rag,
     sessions,
     tasks,
@@ -31,6 +34,19 @@ from api.services.registry import AgentRegistry  # noqa: E402
 from api.services.task_events import TaskEventHub  # noqa: E402
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def _warn_on_insecure_config() -> None:
+    if settings.secret_key == "CHANGE_ME_IN_PRODUCTION":
+        logger.warning("SECRET_KEY is the default; anyone can forge access tokens. Set it in .env.")
+    if not settings.a2a_auth_token:
+        logger.warning(
+            "A2A_AUTH_TOKEN is unset; agents can't register or fetch images. "
+            "Set the same value for the gateway and every agent in .env."
+        )
+    if not (settings.google_client_id and settings.google_client_secret):
+        logger.warning("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET unset; nobody can sign in.")
 
 
 async def _agent_directory() -> dict[str, str]:
@@ -48,6 +64,7 @@ async def _agent_directory() -> dict[str, str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     # ── Startup ──────────────────────────────────────────────────────────────
+    _warn_on_insecure_config()
     orchestrator = Orchestrator(
         LLMConfig(
             api_key=settings.openrouter_api_key,
@@ -94,6 +111,8 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(health.router, prefix="/health", tags=["health"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(projects.router, prefix="/projects", tags=["projects"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
 app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])

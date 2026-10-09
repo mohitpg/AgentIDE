@@ -3,6 +3,8 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
+import * as auth from './auth'
+
 //const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -75,5 +77,11 @@ ipcMain.handle('dialog:selectFolder', async (): Promise<string | null> => {
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]
 })
+
+// Google sign-in + session tokens (see ./auth.ts). The refresh token never
+// crosses into the renderer; these return only the access token + user.
+ipcMain.handle('auth:login', () => auth.login())
+ipcMain.handle('auth:refresh', () => auth.refresh())
+ipcMain.handle('auth:logout', () => auth.logout())
 
 app.whenReady().then(createWindow)

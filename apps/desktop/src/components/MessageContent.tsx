@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { imageUrl } from '../lib/api'
+import { fetchImage } from '../lib/api'
 import { parseAnswer } from '../lib/citations'
 import { splitImageRefs } from '../lib/images'
 import type { AgentStep, Message } from '../types'
@@ -35,6 +35,36 @@ function ThinkingStep({ step }: { step: AgentStep }): JSX.Element {
   )
 }
 
+// A stored image, fetched with the bearer token (a bare <img src> can't send it)
+// and shown through an object URL that's released on unmount.
+function StoredImage({ id, alt }: { id: string; alt: string }): JSX.Element {
+  const [src, setSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    let url: string | null = null
+    let cancelled = false
+    fetchImage(id)
+      .then((blob) => {
+        if (cancelled) return
+        url = URL.createObjectURL(blob)
+        setSrc(url)
+      })
+      .catch(() => {
+        /* missing or not ours — leave the placeholder */
+      })
+    return () => {
+      cancelled = true
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [id])
+
+  return src ? (
+    <img className="message-image" src={src} alt={alt} />
+  ) : (
+    <span className="message-image message-image-pending" aria-label={alt} />
+  )
+}
+
 export default function MessageContent({ message, streaming, onOpenSource }: Props): JSX.Element {
   const caret = streaming && message.role === 'assistant'
 
@@ -49,7 +79,7 @@ export default function MessageContent({ message, streaming, onOpenSource }: Pro
         {text && <span className="message-text">{text}</span>}
         <div className="message-images">
           {ids.map((id, i) => (
-            <img key={id} className="message-image" src={imageUrl(id)} alt={`attachment ${i + 1}`} />
+            <StoredImage key={id} id={id} alt={`attachment ${i + 1}`} />
           ))}
         </div>
       </>

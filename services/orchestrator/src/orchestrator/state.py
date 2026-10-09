@@ -34,7 +34,9 @@ class GraphState(TypedDict):
     # Human-in-the-loop interrupt payload (tbd)
     pending_approval: dict[str, Any] | None
 
-    # Run metadata
+    # Run metadata. user_id + project_id are the caller's row scope; the delegate
+    # forwards them to agents (A2A metadata) so their data access is scoped too.
     run_id: str
     session_id: str
     user_id: str
+    project_id: str

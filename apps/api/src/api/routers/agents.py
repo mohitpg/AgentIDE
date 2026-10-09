@@ -10,6 +10,9 @@ the supervisor discovers them by skill. Backed by `AgentRegistry`
   DELETE /agents/{agent_id}           deregister an agent
   GET    /agents                      list live agents (?include_stale=true for all)
   GET    /agents/discover             list live agents filtered by ?skill= / ?tag=
+
+Registration, heartbeat, and deregistration are service-only (agents send the
+shared A2A_AUTH_TOKEN); listing is open to any authenticated caller.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import get_settings
 from api.db.redis import get_redis
 from api.db.session import get_db
+from api.deps import get_principal, require_service
 from api.schemas.agents import AgentInfo, AgentRegisterRequest
 from api.services.registry import AgentRegistry
 
@@ -40,7 +44,7 @@ def get_registry(
     )
 
 
-@router.post("/register", response_model=AgentInfo)
+@router.post("/register", response_model=AgentInfo, dependencies=[Depends(require_service)])
 async def register_agent(
     payload: AgentRegisterRequest,
     registry: AgentRegistry = Depends(get_registry),
@@ -49,7 +53,11 @@ async def register_agent(
     return AgentInfo.from_record(record)
 
 
-@router.post("/{agent_id}/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/{agent_id}/heartbeat",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_service)],
+)
 async def heartbeat_agent(
     agent_id: str,
     registry: AgentRegistry = Depends(get_registry),
@@ -58,7 +66,9 @@ async def heartbeat_agent(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not registered")
 
 
-@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{agent_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_service)]
+)
 async def deregister_agent(
     agent_id: str,
     registry: AgentRegistry = Depends(get_registry),
@@ -67,7 +77,7 @@ async def deregister_agent(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent not registered")
 
 
-@router.get("", response_model=list[AgentInfo])
+@router.get("", response_model=list[AgentInfo], dependencies=[Depends(get_principal)])
 async def list_agents(
     include_stale: bool = Query(False),
     registry: AgentRegistry = Depends(get_registry),
@@ -76,7 +86,7 @@ async def list_agents(
     return [AgentInfo.from_record(r) for r in records]
 
 
-@router.get("/discover", response_model=list[AgentInfo])
+@router.get("/discover", response_model=list[AgentInfo], dependencies=[Depends(get_principal)])
 async def discover_agents(
     skill: str | None = Query(None),
     tag: str | None = Query(None),

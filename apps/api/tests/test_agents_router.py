@@ -66,7 +66,9 @@ def fake_registry() -> FakeRegistry:
 
 
 @pytest.fixture
-async def client(fake_registry):
+async def client(fake_registry, auth):
+    # Agents call these endpoints with the shared service token.
+    auth.as_service()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as c:
@@ -112,6 +114,20 @@ async def test_deregister(client):
     assert (await client.delete("/agents/code")).status_code == 204
     assert (await client.delete("/agents/code")).status_code == 404
     assert (await client.get("/agents")).json() == []
+
+
+async def test_unauthenticated_is_rejected(client, auth):
+    auth.clear()
+    assert (await client.get("/agents")).status_code == 401
+    resp = await client.post("/agents/register", json={"agent_id": "code", "card": _card()})
+    assert resp.status_code == 401
+
+
+async def test_users_can_list_but_not_register(client, auth):
+    auth.as_user(auth.make_user())
+    assert (await client.get("/agents")).status_code == 200
+    resp = await client.post("/agents/register", json={"agent_id": "code", "card": _card()})
+    assert resp.status_code == 403
 
 
 async def test_discover_by_skill(client):

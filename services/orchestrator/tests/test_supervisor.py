@@ -19,9 +19,11 @@ class FakeA2AClient:
         self.text = text
         self.result = result or {}
         self.calls: list[tuple[str, str, dict]] = []
+        self.scopes: list[dict | None] = []
 
-    async def stream(self, base_url, skill_id, input_data, run_id=None):
+    async def stream(self, base_url, skill_id, input_data, run_id=None, *, scope=None):
         self.calls.append((base_url, skill_id, input_data))
+        self.scopes.append(scope)
         yield {"type": "token", "run_id": run_id, "data": {"content": self.text, "index": 0}}
         yield {"type": "done", "run_id": run_id, "data": self.result}
 
@@ -33,7 +35,7 @@ class MultiA2AClient:
         self.by_skill = by_skill
         self.calls: list[tuple[str, str, dict]] = []
 
-    async def stream(self, base_url, skill_id, input_data, run_id=None):
+    async def stream(self, base_url, skill_id, input_data, run_id=None, *, scope=None):
         self.calls.append((base_url, skill_id, input_data))
         text = self.by_skill.get(skill_id, "")
         yield {"type": "token", "run_id": run_id, "data": {"content": text, "index": 0}}
@@ -50,6 +52,7 @@ def _state(text: str, *, mode: str = "auto", step_count: int = 0) -> GraphState:
         "run_id": "r",
         "session_id": "s",
         "user_id": "u",
+        "project_id": "p",
         "step_count": step_count,
         "mode": mode,
     }
@@ -160,6 +163,21 @@ async def test_trivial_turn_responds_without_delegating():
     assert result["step_count"] == 0
     assert result["active_agent"] == "assistant"
     assert result["messages"][-1].content == "Hi, how can I help?"
+
+
+@pytest.mark.asyncio
+async def test_delegate_forwards_the_callers_scope():
+    """Agents get the user + project so their data access (RAG, images) is scoped."""
+    client = FakeA2AClient("answer")
+    graph = _build(
+        _router('{"next": "rag", "skill": "answer"}', '{"next": "respond"}'),
+        _general("done"),
+        client,
+    )
+
+    await graph.ainvoke(_state("what does the spec say?"), _CFG)
+
+    assert client.scopes == [{"user_id": "u", "project_id": "p"}]
 
 
 @pytest.mark.asyncio

@@ -45,8 +45,10 @@ class Settings(BaseSettings):
     registry_ttl_seconds: int = 90
     # How long the live-agent list is cached in Redis before re-reading Postgres.
     registry_cache_ttl_seconds: int = 30
-    # Shared bearer the supervisor sends when delegating to agents; must match the
-    # agents' A2A_AUTH_TOKEN. Empty = no auth header (dev default).
+    # Shared service secret. The supervisor sends it when delegating to agents, and
+    # agents send it back when calling the gateway (register, heartbeat, MCP
+    # assignments, image fetch). Must match the agents' A2A_AUTH_TOKEN. Empty =
+    # service endpoints reject every call, so agents cannot register.
     a2a_auth_token: str = ""
 
     # ── RabbitMQ ─────────────────────────────────────────────────────────────
@@ -57,6 +59,21 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+
+    # ── Google OAuth ──────────────────────────────────────────────────────────
+    # A "Desktop app" OAuth client from Google Cloud Console. The desktop runs
+    # the browser + loopback-redirect half of the flow (PKCE); the gateway owns
+    # the secret and does the code exchange, so it never reaches Electron.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Comma-separated emails that are made admins on sign-in. Admins manage the
+    # host-wide resources (MCP servers, workspace folder). Empty → the first user
+    # to sign in becomes the admin.
+    auth_admin_emails: str = ""
+
+    @property
+    def admin_emails(self) -> set[str]:
+        return {e.strip().lower() for e in self.auth_admin_emails.split(",") if e.strip()}
 
     # ── LLM ──────────────────────────────────────────────────────────────────
     anthropic_api_key: str = ""

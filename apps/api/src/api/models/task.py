@@ -48,6 +48,19 @@ class Task(Base, TimestampMixin):
     result: Mapped[dict[str, Any] | None] = mapped_column(_JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     # Optional link to the chat session that kicked the task off.
     session_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),

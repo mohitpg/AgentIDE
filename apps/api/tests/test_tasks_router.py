@@ -55,7 +55,9 @@ def calls(monkeypatch) -> dict:
 
 
 @pytest.fixture
-async def client(sqlite_factory, calls):
+async def client(sqlite_factory, calls, auth):
+    auth.as_user(auth.make_user())
+
     async def override_db():
         async with sqlite_factory() as s:
             yield s
@@ -133,6 +135,30 @@ async def test_cancel_revokes_and_publishes(client):
     assert event["type"] == "task_progress"
     assert event["data"]["status"] == "revoked"
     assert event["data"]["task_id"] == created["id"]
+
+
+async def test_tasks_are_invisible_outside_their_scope(client, auth):
+    owner = auth.make_user()
+    scope = auth.as_user(owner)
+    created = (await client.post("/tasks", json={"type": "mock"})).json()
+    tid = created["id"]
+
+    # Another user — and the same user in another project — see nothing.
+    for other in (auth.make_user(), owner):
+        auth.as_user(other)  # fresh random project each time
+        assert (await client.get("/tasks")).json() == []
+        assert (await client.get(f"/tasks/{tid}")).status_code == 404
+        assert (await client.post(f"/tasks/{tid}/cancel")).status_code == 404
+    assert client.calls["revoke"] == []
+
+    auth.as_user(owner, scope.project_id)
+    assert [t["id"] for t in (await client.get("/tasks")).json()] == [tid]
+
+
+async def test_unauthenticated_is_rejected(client, auth):
+    auth.clear()
+    assert (await client.get("/tasks")).status_code == 401
+    assert (await client.post("/tasks", json={"type": "mock"})).status_code == 401
 
 
 async def test_cancel_unknown_404(client):

@@ -55,9 +55,14 @@ def _rag_config():  # type: ignore[no-untyped-def]
 
 
 async def _ingest_async(
-    data: bytes, filename: str, content_type: str | None, session_id: uuid.UUID | None
+    data: bytes,
+    filename: str,
+    content_type: str | None,
+    session_id: uuid.UUID | None,
+    user_id: uuid.UUID,
+    project_id: uuid.UUID,
 ) -> dict:
-    from rag import RagPipeline
+    from rag import RagPipeline, RagScope
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.pool import NullPool
 
@@ -67,6 +72,7 @@ async def _ingest_async(
             pipeline = RagPipeline(_rag_config())
             result = await pipeline.ingest(
                 session,
+                scope=RagScope(user_id=user_id, project_id=project_id),
                 filename=filename,
                 content_type=content_type,
                 data=data,
@@ -90,8 +96,10 @@ def index_document(  # type: ignore[no-untyped-def]
     filename: str | None = None,
     content_type: str | None = None,
     session_id: str | None = None,
+    user_id: str | None = None,
+    project_id: str | None = None,
 ):
-    """Index a single staged file into pgvector, reporting progress."""
+    """Index a single staged file into pgvector under the uploader's scope."""
     task_id = self.request.id
     publish(task_id, status="started", progress=0, message="Starting ingestion")
     path = Path(document_path)
@@ -105,9 +113,16 @@ def index_document(  # type: ignore[no-untyped-def]
             message=f"Read {name} ({len(data)} bytes)",
         )
 
+        if not (user_id and project_id):
+            # Never index an ownerless document: no scoped search could find it.
+            raise ValueError("index_document requires user_id and project_id")
         sid = uuid.UUID(session_id) if session_id else None
         publish(task_id, status="progress", progress=40, message="Chunking & embedding")
-        result = _run_async(_ingest_async(data, name, content_type, sid))
+        result = _run_async(
+            _ingest_async(
+                data, name, content_type, sid, uuid.UUID(user_id), uuid.UUID(project_id)
+            )
+        )
 
         publish(
             task_id,

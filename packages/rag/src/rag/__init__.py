@@ -9,6 +9,7 @@ Public surface:
   extract_text                  — bytes → text (txt/md/pdf/…)
   get_embedder / get_reranker   — cached model factories
   VectorStore                   — pgvector data-access (inject an AsyncSession)
+  RagScope                      — the user + project every store call is scoped to
 
 """
 
@@ -20,7 +21,7 @@ from rag.embeddings import Embedder, get_embedder
 from rag.loaders import UnsupportedDocumentError, extract_text
 from rag.pipeline import IngestResult, RagPipeline, SearchHit
 from rag.reranker import Reranker, get_reranker
-from rag.store import Candidate, ChunkInput, VectorStore, merge_candidates
+from rag.store import Candidate, ChunkInput, RagScope, VectorStore, merge_candidates
 
 __all__ = [
     "Candidate",
@@ -30,6 +31,7 @@ __all__ = [
     "IngestResult",
     "RagConfig",
     "RagPipeline",
+    "RagScope",
     "Reranker",
     "SearchHit",
     "UnsupportedDocumentError",

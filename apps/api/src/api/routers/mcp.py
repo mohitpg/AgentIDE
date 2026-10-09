@@ -14,6 +14,11 @@ configs and does on-demand discovery.
   PATCH  /mcp/{id}            update (enable, reassign agents, …)
   DELETE /mcp/{id}            remove a server
   POST   /mcp/{id}/discover   connect the server and list its tools (live)
+
+MCP servers are host-wide (agents are shared processes, and registering a stdio
+server means running a command on the host), so they aren't per-user data:
+any signed-in user can read them, only admins can change or discover them, and
+`/mcp/agent/{id}` is for agents only (service token).
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from mcp_manager.config import MCPServerConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.db.session import get_db
-from api.services.workspace import get_workspace
+from api.deps import get_current_user, require_admin, require_service
 from api.schemas.mcp import (
     MCPDiscoverResponse,
     MCPServerCreate,
@@ -35,6 +40,7 @@ from api.schemas.mcp import (
     MCPToolRead,
 )
 from api.services.mcp_servers import MCPServerStore, to_config
+from api.services.workspace import get_workspace
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -44,12 +50,17 @@ def get_store(db: AsyncSession = Depends(get_db)) -> MCPServerStore:
     return MCPServerStore(db)
 
 
-@router.get("", response_model=list[MCPServerRead])
+@router.get("", response_model=list[MCPServerRead], dependencies=[Depends(get_current_user)])
 async def list_servers(store: MCPServerStore = Depends(get_store)) -> list[MCPServerRead]:
     return [MCPServerRead.model_validate(r, from_attributes=True) for r in await store.list()]
 
 
-@router.post("", response_model=MCPServerRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=MCPServerRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 async def create_server(
     payload: MCPServerCreate, store: MCPServerStore = Depends(get_store)
 ) -> MCPServerRead:
@@ -59,7 +70,11 @@ async def create_server(
     return MCPServerRead.model_validate(row, from_attributes=True)
 
 
-@router.get("/builtins", response_model=list[MCPServerCreate])
+@router.get(
+    "/builtins",
+    response_model=list[MCPServerCreate],
+    dependencies=[Depends(get_current_user)],
+)
 async def list_builtins() -> list[MCPServerCreate]:
     """Templates the settings UI can one-click register (filesystem/git/fetch)."""
     workspace = get_workspace()
@@ -68,7 +83,11 @@ async def list_builtins() -> list[MCPServerCreate]:
     ]
 
 
-@router.get("/agent/{agent_id}", response_model=list[MCPServerRead])
+@router.get(
+    "/agent/{agent_id}",
+    response_model=list[MCPServerRead],
+    dependencies=[Depends(require_service)],
+)
 async def servers_for_agent(
     agent_id: str, store: MCPServerStore = Depends(get_store)
 ) -> list[MCPServerRead]:
@@ -77,7 +96,7 @@ async def servers_for_agent(
     return [MCPServerRead.model_validate(r, from_attributes=True) for r in rows]
 
 
-@router.get("/{server_id}", response_model=MCPServerRead)
+@router.get("/{server_id}", response_model=MCPServerRead, dependencies=[Depends(get_current_user)])
 async def get_server(
     server_id: str, store: MCPServerStore = Depends(get_store)
 ) -> MCPServerRead:
@@ -87,7 +106,7 @@ async def get_server(
     return MCPServerRead.model_validate(row, from_attributes=True)
 
 
-@router.patch("/{server_id}", response_model=MCPServerRead)
+@router.patch("/{server_id}", response_model=MCPServerRead, dependencies=[Depends(require_admin)])
 async def update_server(
     server_id: str,
     payload: MCPServerUpdate,
@@ -99,7 +118,9 @@ async def update_server(
     return MCPServerRead.model_validate(row, from_attributes=True)
 
 
-@router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{server_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)]
+)
 async def delete_server(
     server_id: str, store: MCPServerStore = Depends(get_store)
 ) -> None:
@@ -107,7 +128,11 @@ async def delete_server(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "server not found")
 
 
-@router.post("/{server_id}/discover", response_model=MCPDiscoverResponse)
+@router.post(
+    "/{server_id}/discover",
+    response_model=MCPDiscoverResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def discover_server(
     server_id: str, store: MCPServerStore = Depends(get_store)
 ) -> MCPDiscoverResponse:

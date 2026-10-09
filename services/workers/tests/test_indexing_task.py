@@ -33,7 +33,12 @@ def test_index_document_success_and_cleanup(monkeypatch, tmp_path):
     # _ingest_async would build a real coroutine; replace it so nothing is awaited.
     monkeypatch.setattr(idx_mod, "_ingest_async", lambda *a, **k: None)
 
-    result = index_document.apply(kwargs={"document_path": str(staged), "filename": "doc.txt"})
+    result = index_document.apply(kwargs={
+        "document_path": str(staged),
+        "filename": "doc.txt",
+        "user_id": "22222222-2222-2222-2222-222222222222",
+        "project_id": "33333333-3333-3333-3333-333333333333",
+    })
 
     assert result.successful()
     assert result.result == fake_result
@@ -45,6 +50,21 @@ def test_index_document_success_and_cleanup(monkeypatch, tmp_path):
     assert events[-1]["result"]["num_chunks"] == 3
 
     # The staged upload is removed after a successful index.
+    assert not staged.exists()
+
+
+def test_index_document_without_owner_fails_and_cleans_up(monkeypatch, tmp_path):
+    events = _capture_publish(monkeypatch)
+    staged = tmp_path / "doc.txt"
+    staged.write_text("hello world", encoding="utf-8")
+    monkeypatch.setattr(idx_mod, "_run_async", lambda coro: {"num_chunks": 1})
+
+    result = index_document.apply(kwargs={"document_path": str(staged)})
+
+    # An ownerless document would be unsearchable, so it's refused outright.
+    assert result.failed()
+    assert events[-1]["status"] == "failure"
+    assert "user_id" in events[-1]["error"]
     assert not staged.exists()
 
 

@@ -75,7 +75,9 @@ def store() -> FakeStore:
 
 
 @pytest.fixture
-async def client(store):
+async def client(store, auth):
+    # MCP servers are host-wide; changing them is admin-only.
+    auth.as_user(auth.make_user(admin=True))
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
     ) as c:
@@ -122,14 +124,32 @@ async def test_list_servers(client):
     assert [s["id"] for s in resp.json()] == ["filesystem", "git"]
 
 
-async def test_servers_for_agent_filters_by_assignment_and_enabled(client):
+async def test_servers_for_agent_filters_by_assignment_and_enabled(client, auth):
     await client.post("/mcp", json=_payload(id="git", allowed_agents=["code"]))
     await client.post("/mcp", json=_payload(id="fetch", allowed_agents=["web"]))
     await client.post("/mcp", json=_payload(id="fs", allowed_agents=[]))  # all agents
     await client.post("/mcp", json=_payload(id="off", allowed_agents=["code"], enabled=False))
 
+    auth.as_service()  # agents fetch their assignments with the service token
     resp = await client.get("/mcp/agent/code")
     assert {s["id"] for s in resp.json()} == {"git", "fs"}  # not fetch (web), not off
+
+
+async def test_non_admin_can_read_but_not_change(client, auth):
+    await client.post("/mcp", json=_payload())
+    auth.as_user(auth.make_user(admin=False))
+
+    assert (await client.get("/mcp")).status_code == 200
+    assert (await client.get("/mcp/git")).status_code == 200
+    assert (await client.post("/mcp", json=_payload(id="x"))).status_code == 403
+    assert (await client.patch("/mcp/git", json={"enabled": False})).status_code == 403
+    assert (await client.delete("/mcp/git")).status_code == 403
+    assert (await client.post("/mcp/git/discover")).status_code == 403
+
+
+async def test_agent_assignments_are_service_only(client):
+    # An admin user is still not an agent: the assignments carry MCP env secrets.
+    assert (await client.get("/mcp/agent/code")).status_code == 403
 
 
 async def test_update_toggles_enabled(client):

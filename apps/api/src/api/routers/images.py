@@ -10,6 +10,10 @@ is stored once on disk and referenced by a compact token, so neither the WebSock
 frame nor the persisted `messages` row carries the image. Rows are scoped to the
 chat session and cascade-deleted with the conversation (the staged files are swept
 in `routers/sessions.delete_session`).
+
+Uploads are stamped with the caller's user + project. `GET /images/{id}` serves
+only the caller's own images, whether the caller is the UI or the Vision agent
+acting for them (service token + `X-On-Behalf-Of`, see `api.deps`).
 """
 
 from __future__ import annotations
@@ -25,8 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import Settings, get_settings
 from api.db.session import get_db
-from api.models.conversation import Conversation
+from api.deps import Scope, get_current_user, get_scope, scoped_session_id
 from api.models.image import Image
+from api.models.user import User
 from api.schemas.images import ImageUploadResponse
 
 router = APIRouter()
@@ -62,27 +67,19 @@ def _validate_upload(data: bytes, settings: Settings) -> None:
         )
 
 
-async def _resolve_session(
-    db: AsyncSession, session_id: uuid.UUID | None
-) -> uuid.UUID | None:
-    """Keep the session link only if that conversation exists"""
-    if session_id is None:
-        return None
-    exists = await db.get(Conversation, session_id)
-    return session_id if exists is not None else None
-
 
 @router.post("", response_model=ImageUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_image(
     file: UploadFile = File(...),
     session_id: uuid.UUID | None = Form(default=None),
+    scope: Scope = Depends(get_scope),
     db: AsyncSession = Depends(get_db),
 ) -> ImageUploadResponse:
     """Stage an attached image and return its `<Image at db.images.{id}>` reference."""
     settings = get_settings()
     data = await file.read()
     _validate_upload(data, settings)
-    session_id = await _resolve_session(db, session_id)
+    session_id = await scoped_session_id(db, scope, session_id)
 
     image_id = uuid.uuid4()
     filename = file.filename or "image"
@@ -98,6 +95,8 @@ async def upload_image(
             path=str(path),
             byte_size=len(data),
             session_id=session_id,
+            user_id=scope.user_id,
+            project_id=scope.project_id,
         )
     )
     await db.commit()
@@ -113,11 +112,17 @@ async def upload_image(
 @router.get("/{image_id}")
 async def get_image(
     image_id: uuid.UUID,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    """Serve a staged image — used by the Vision agent and the UI thumbnail."""
+    """Serve a staged image — used by the Vision agent and the UI thumbnail.
+
+    Scoped by user only (not project): an image is the uploader's whichever
+    project they're viewing. Chat refuses foreign refs per project before the
+    Vision agent ever sees them (`routers.chat`).
+    """
     image = await db.get(Image, image_id)
-    if image is None:
+    if image is None or image.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Image not found")
     path = Path(image.path)
     if not path.is_file():

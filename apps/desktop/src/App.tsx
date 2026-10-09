@@ -4,20 +4,32 @@ import ChatPanel from './components/ChatPanel'
 import DocsPanel from './components/DocsPanel'
 import HealthBadge from './components/HealthBadge'
 import McpPanel from './components/McpPanel'
+import ProjectSwitcher from './components/ProjectSwitcher'
 import SessionList from './components/SessionList'
 import TasksPanel from './components/TasksPanel'
 import TracePanel from './components/TracePanel'
+import UserMenu from './components/UserMenu'
 import WorkspaceChip from './components/WorkspaceChip'
 import { useChat } from './hooks/useChat'
 import { useDocuments } from './hooks/useDocuments'
 import { useMcp } from './hooks/useMcp'
+import type { UseProjects } from './hooks/useProjects'
 import { useTasks } from './hooks/useTasks'
+import type { AuthUser } from './lib/auth'
 import './App.css'
 
 // The right side hosts exactly one panel at a time (or none).
 type RightPanel = 'trace' | 'tasks' | 'docs' | 'mcp'
 
-function App(): JSX.Element {
+interface Props {
+  user: AuthUser
+  projects: UseProjects
+}
+
+// One project's workspace. Root keys this on the active project, so switching
+// projects remounts it: every hook refetches and both sockets reconnect scoped
+// to the new project.
+function App({ user, projects }: Props): JSX.Element {
   const [activeId, setActiveId] = useState<string | null>(null)
   // A new chat starts as a client-side draft: it's open in the composer with an
   // id, but isn't written to the DB / history until its first message is sent.
@@ -88,7 +100,8 @@ function App(): JSX.Element {
             </svg>
             AgentIDE
           </span>
-          <WorkspaceChip />
+          <ProjectSwitcher projects={projects} />
+          <WorkspaceChip canChange={user.is_superuser} />
         </div>
         <div className="app-header-right">
           <button
@@ -132,6 +145,7 @@ function App(): JSX.Element {
             MCP
           </button>
           <HealthBadge />
+          <UserMenu user={user} />
         </div>
       </header>
 

@@ -10,10 +10,21 @@ from __future__ import annotations
 
 import uuid
 
-from langchain_core.messages import AIMessageChunk
-from rag import RagConfig, SearchHit
-
+import pytest
+from agent_common.scope import RequestScope, reset_scope, set_scope
 from agent_rag.agent import RagAgent, format_context
+from langchain_core.messages import AIMessageChunk
+from rag import RagConfig, RagScope, SearchHit
+
+SCOPE = RequestScope(user_id=uuid.uuid4(), project_id=uuid.uuid4())
+
+
+@pytest.fixture(autouse=True)
+def request_scope():
+    """Run each test as if the supervisor sent SCOPE (what the executor does)."""
+    token = set_scope(SCOPE)
+    yield
+    reset_scope(token)
 
 
 class FakeSession:
@@ -28,8 +39,10 @@ class FakePipeline:
     def __init__(self, hits: list[SearchHit]) -> None:
         self._hits = hits
         self.config = RagConfig()
+        self.scopes: list[RagScope] = []
 
-    async def search(self, session, query, *, top_k, candidate_k):  # type: ignore[no-untyped-def]
+    async def search(self, session, query, *, scope, top_k, candidate_k):  # type: ignore[no-untyped-def]
+        self.scopes.append(scope)
         return self._hits
 
 
@@ -101,3 +114,22 @@ async def test_retrieve_returns_passages_without_llm() -> None:
 async def test_no_hits_returns_guidance() -> None:
     out = await _collect(_agent([]), "answer", "anything")
     assert "couldn't find anything relevant" in out
+
+
+async def test_search_is_scoped_to_the_callers_project() -> None:
+    pipeline = FakePipeline([_hit("doc.txt", 0, "x")])
+    agent = RagAgent(pipeline=pipeline, session_factory=lambda: FakeSession())
+    await _collect(agent, "retrieve", "q")
+    assert pipeline.scopes == [RagScope(user_id=SCOPE.user_id, project_id=SCOPE.project_id)]
+
+
+async def test_no_scope_searches_nothing(request_scope) -> None:
+    pipeline = FakePipeline([_hit("doc.txt", 0, "secret")])
+    agent = RagAgent(pipeline=pipeline, session_factory=lambda: FakeSession())
+    token = set_scope(None)
+    try:
+        out = await _collect(agent, "retrieve", "q")
+    finally:
+        reset_scope(token)
+    assert "secret" not in out
+    assert pipeline.scopes == []  # never queried

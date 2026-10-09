@@ -8,6 +8,9 @@ Switching is runtime-only (see ``api.services.workspace``): it updates the value
 the built-in MCP templates read, then best-effort notifies every live agent's
 ``POST /admin/workspace`` so workspace-aware agents (the code agent) rebuild their
 filesystem/git tools rooted at the new directory without a restart.
+
+The workspace is host-wide (every user's code-agent turns run in it), so any
+signed-in user can read it but only admins can switch it.
 """
 
 from __future__ import annotations
@@ -16,11 +19,12 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from api.config import get_settings
 from api.db.redis import redis_client
 from api.db.session import AsyncSessionLocal
-from api.config import get_settings
+from api.deps import get_current_user, require_admin
 from api.schemas.workspace import WorkspaceRead, WorkspaceUpdate
 from api.services.registry import AgentRegistry
 from api.services.workspace import get_workspace, set_workspace
@@ -61,12 +65,12 @@ async def _broadcast(path: str) -> None:
                 logger.warning("workspace update to agent '%s' failed: %s", agent_id, exc)
 
 
-@router.get("", response_model=WorkspaceRead)
+@router.get("", response_model=WorkspaceRead, dependencies=[Depends(get_current_user)])
 async def read_workspace() -> WorkspaceRead:
     return _read(get_workspace())
 
 
-@router.put("", response_model=WorkspaceRead)
+@router.put("", response_model=WorkspaceRead, dependencies=[Depends(require_admin)])
 async def change_workspace(payload: WorkspaceUpdate) -> WorkspaceRead:
     try:
         path = set_workspace(payload.path)

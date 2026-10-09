@@ -7,8 +7,10 @@ subscription and does two things for every event:
 
   1. **Persists** the transition to the `tasks` table (the durable record the
      REST API reads), and
-  2. **Fans out** the raw event to every connected `/tasks/ws` client through an
-     in-process queue, so the desktop UI updates live.
+  2. **Fans out** the raw event through an in-process queue to the connected
+     `/tasks/ws` clients whose user + project own that task, so the desktop UI
+     updates live. Ownership comes from the row, so an event whose task row
+     can't be read (unknown id, DB down) goes to nobody.
 
 This makes the gateway the single writer of task *status* transitions: the REST
 layer only creates the initial `pending` row and publishes a `revoked` event on
@@ -40,6 +42,9 @@ TASK_EVENTS_CHANNEL = "tasks:events"
 # Bound per-subscriber buffering; a client that falls this far behind is dropped.
 _SUBSCRIBER_MAXSIZE = 1000
 
+# (user_id, project_id) — who may see a task's events.
+_Owner = tuple[uuid.UUID | None, uuid.UUID | None]
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -58,7 +63,7 @@ class TaskEventHub:
         self._redis_url = redis_url
         self._channel = channel
         self._session_factory = session_factory
-        self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+        self._subscribers: dict[asyncio.Queue[dict[str, Any]], _Owner] = {}
         self._task: asyncio.Task[None] | None = None
         self._redis: aioredis.Redis | None = None
         self._stopped = False
@@ -82,13 +87,15 @@ class TaskEventHub:
             self._redis = None
 
     # ── fan-out subscriptions (one per /tasks/ws connection) ───────────────────
-    def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
+    def subscribe(
+        self, *, user_id: uuid.UUID, project_id: uuid.UUID
+    ) -> asyncio.Queue[dict[str, Any]]:
         q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_SUBSCRIBER_MAXSIZE)
-        self._subscribers.add(q)
+        self._subscribers[q] = (user_id, project_id)
         return q
 
     def unsubscribe(self, q: asyncio.Queue[dict[str, Any]]) -> None:
-        self._subscribers.discard(q)
+        self._subscribers.pop(q, None)
 
     # ── publishing (used by the /cancel endpoint) ──────────────────────────────
     async def publish(self, event: dict[str, Any]) -> None:
@@ -124,37 +131,43 @@ class TaskEventHub:
             return
 
         try:
-            await self._persist(event)
+            owner = await self._persist(event)
         except Exception:
             logger.exception("failed to persist task event")
+            return
 
-        self._fanout(event)
+        if owner is not None:
+            self._fanout(event, owner)
 
-    def _fanout(self, event: dict[str, Any]) -> None:
-        for q in list(self._subscribers):
+    def _fanout(self, event: dict[str, Any], owner: _Owner) -> None:
+        for q, sub_owner in list(self._subscribers.items()):
+            if sub_owner != owner:
+                continue
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
                 # Drop the slow consumer's buffer rather than blocking the hub.
-                self._subscribers.discard(q)
+                self._subscribers.pop(q, None)
 
-    async def _persist(self, event: dict[str, Any]) -> None:
+    async def _persist(self, event: dict[str, Any]) -> _Owner | None:
+        """Apply the event to its task row; return the row's owner (or None)."""
         data = event.get("data") or {}
         raw_id = data.get("task_id")
         if not raw_id:
-            return
+            return None
         try:
             task_id = uuid.UUID(str(raw_id))
         except ValueError:
-            return
+            return None
 
         async with self._session_factory() as db:
             row = await db.get(Task, task_id)
             if row is None:
-                return
+                return None
+            owner = (row.user_id, row.project_id)
             # First terminal status wins — never downgrade a finished task.
             if row.status in TERMINAL_STATUSES:
-                return
+                return owner
 
             status = data.get("status")
             if status:
@@ -175,3 +188,4 @@ class TaskEventHub:
                     row.error = data.get("error") or data.get("message")
 
             await db.commit()
+            return owner
