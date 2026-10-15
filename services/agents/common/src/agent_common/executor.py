@@ -20,11 +20,14 @@ from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Part, TaskState, TextPart
 from a2a.utils import new_agent_text_message, new_task
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 
 from agent_common.base import BaseAgent
 from agent_common.scope import parse_scope, reset_scope, set_scope
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 
 def _metadata(context: RequestContext) -> dict:
@@ -59,21 +62,30 @@ class LLMAgentExecutor(AgentExecutor):
         text = ""
         # The caller's user + project, visible to the agent via `current_scope()`.
         scope_token = set_scope(parse_scope(_metadata(context)))
-        try:
-            async for chunk in self._agent.run(skill_id, user_input, run_id=task.id):
-                text += chunk
-                await updater.update_status(
-                    TaskState.working,
-                    new_agent_text_message(chunk, task.context_id, task.id),
+        # Child of the request span, which continues the supervisor's trace; the
+        # agent's LLM / tool / DB calls nest under it.
+        with _tracer.start_as_current_span(f"agent.run {self._agent.id}", attributes={
+            "agentide.agent.id": self._agent.id,
+            "agentide.agent.skill": skill_id,
+            "agentide.a2a.task_id": task.id,
+        }) as span:
+            try:
+                async for chunk in self._agent.run(skill_id, user_input, run_id=task.id):
+                    text += chunk
+                    await updater.update_status(
+                        TaskState.working,
+                        new_agent_text_message(chunk, task.context_id, task.id),
+                    )
+            except Exception as exc:  # surface as a failed task rather than a 500
+                logger.exception("agent %s skill %s failed", self._agent.id, skill_id)
+                span.record_exception(exc)
+                span.set_status(StatusCode.ERROR, str(exc))
+                await updater.failed(
+                    new_agent_text_message(f"Error: {exc}", task.context_id, task.id)
                 )
-        except Exception as exc:  # surface as a failed task rather than a 500
-            logger.exception("agent %s skill %s failed", self._agent.id, skill_id)
-            await updater.failed(
-                new_agent_text_message(f"Error: {exc}", task.context_id, task.id)
-            )
-            return
-        finally:
-            reset_scope(scope_token)
+                return
+            finally:
+                reset_scope(scope_token)
 
         await updater.add_artifact(
             [Part(root=TextPart(text=text))],

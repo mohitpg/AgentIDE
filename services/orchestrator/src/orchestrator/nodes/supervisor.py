@@ -21,6 +21,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
+from opentelemetry import trace
 from pydantic import BaseModel, Field
 from schemas.events import AgentStepEvent
 
@@ -29,6 +30,7 @@ from orchestrator.nodes.base import content_text, split_turn, stream_writer
 from orchestrator.state import GraphState
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 # Maximum number of specialist (delegate) hops per turn before the supervisor is
 # forced to respond. Bounds the loop; `runtime.py` derives its recursion_limit
@@ -271,6 +273,7 @@ class SupervisorNode:
         response = await self._model.ainvoke(messages)
         return _parse_decision(content_text(response))
 
+    @_tracer.start_as_current_span("supervisor")
     async def __call__(self, state: GraphState) -> dict:
         writer = stream_writer()
         run_id = state.get("run_id", "")
@@ -294,6 +297,13 @@ class SupervisorNode:
             ])
 
         decision["input"] = _build_skill_input(state)
+        # The router's free-text `reason` stays out: it can echo the user's request.
+        trace.get_current_span().set_attributes({
+            "agentide.chat.mode": mode,
+            "agentide.step": step_count,
+            "agentide.route.next": str(decision["next"]),
+            "agentide.route.skill": str(decision["skill"] or ""),
+        })
 
         writer(AgentStepEvent(run_id=run_id, data={
             "agent": "supervisor", "node": "supervisor", "phase": "exit",

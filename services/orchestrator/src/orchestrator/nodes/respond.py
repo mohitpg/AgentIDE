@@ -16,10 +16,13 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
+from opentelemetry import trace
 from schemas.events import AgentStepEvent, Channel, DoneEvent, TokenEvent
 
 from orchestrator.nodes.base import split_turn, stream_writer
 from orchestrator.state import GraphState
+
+_tracer = trace.get_tracer(__name__)
 
 # Appended to the caller-supplied system prompt so synthesis never mangles
 # specialist output — see apps/desktop/src/lib/citations.ts.
@@ -48,6 +51,7 @@ class RespondNode:
         self._model = model
         self._system = SystemMessage(content=str(general_system.content) + _RESPOND_SUFFIX)
 
+    @_tracer.start_as_current_span("respond")
     async def __call__(self, state: GraphState) -> dict:
         writer = stream_writer()
         run_id = state.get("run_id", "")
@@ -63,6 +67,8 @@ class RespondNode:
         # vision agent already resolved and analysed the image, and its analysis is
         # in the prior messages.
         _, _, this_turn_steps = split_turn(state)
+        trace.get_current_span().set_attribute("agentide.respond.specialist_steps",
+                                               len(this_turn_steps))
         messages: list = [self._system, *state["messages"]]
         if this_turn_steps:
             messages.append(HumanMessage(content=_SYNTHESIS_INSTRUCTION))

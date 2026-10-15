@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from langchain_core.messages import SystemMessage
 from langchain_openrouter import ChatOpenRouter
+from telemetry import llm_callbacks
 
 from agent_common.config import AgentSettings
 
@@ -42,6 +43,7 @@ def build_chat_model(config: LLMConfig, *, streaming: bool = True) -> ChatOpenRo
         "temperature": config.temperature,
         "streaming": streaming,
         "stream_usage": True,
+        "callbacks": llm_callbacks(),  # a `chat {model}` span + token metrics per call
     }
     if config.api_key:
         kwargs["api_key"] = config.api_key

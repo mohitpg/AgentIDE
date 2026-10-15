@@ -15,6 +15,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag.chunking import chunk_text
@@ -23,6 +24,8 @@ from rag.embeddings import Embedder, get_embedder
 from rag.loaders import extract_text
 from rag.reranker import Reranker, apply_rerank, get_reranker
 from rag.store import Candidate, ChunkInput, RagScope, VectorStore, merge_candidates
+
+_tracer = trace.get_tracer(__name__)
 
 
 @dataclass
@@ -69,6 +72,7 @@ class RagPipeline:
         return self._reranker
 
     # ── Ingestion ─────────────────────────────────────────────────────────────
+    @_tracer.start_as_current_span("rag.ingest")
     async def ingest(
         self,
         session: AsyncSession,
@@ -88,11 +92,15 @@ class RagPipeline:
         )
         if not chunks:
             raise ValueError(f"{filename!r} produced no chunks")
+        trace.get_current_span().set_attributes(
+            {"agentide.rag.bytes": len(data), "agentide.rag.chunks": len(chunks)}
+        )
 
         embedder = self._get_embedder()
-        embeddings = await asyncio.to_thread(
-            embedder.embed_documents, [c.text for c in chunks]
-        )
+        with _tracer.start_as_current_span("rag.embed_documents"):
+            embeddings = await asyncio.to_thread(
+                embedder.embed_documents, [c.text for c in chunks]
+            )
 
         document_id = await self.store.add_document(
             session,
@@ -121,6 +129,7 @@ class RagPipeline:
         )
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
+    @_tracer.start_as_current_span("rag.search")
     async def search(
         self,
         session: AsyncSession,
@@ -135,20 +144,29 @@ class RagPipeline:
         candidate_k = candidate_k or self.config.candidate_k
 
         embedder = self._get_embedder()
-        query_embedding = await asyncio.to_thread(embedder.embed_query, query)
+        with _tracer.start_as_current_span("rag.embed_query"):
+            query_embedding = await asyncio.to_thread(embedder.embed_query, query)
 
         vector_hits = await self.store.vector_search(
             session, query_embedding, candidate_k, scope
         )
         keyword_hits = await self.store.keyword_search(session, query, candidate_k, scope)
         candidates: list[Candidate] = merge_candidates(vector_hits, keyword_hits)
+        span = trace.get_current_span()
+        span.set_attributes({
+            "agentide.rag.vector_hits": len(vector_hits),
+            "agentide.rag.keyword_hits": len(keyword_hits),
+            "agentide.rag.candidates": len(candidates),
+        })
         if not candidates:
             return []
 
         reranker = self._get_reranker()
-        ranked = await asyncio.to_thread(
-            apply_rerank, reranker, query, candidates, lambda c: c.content, top_k
-        )
+        with _tracer.start_as_current_span("rag.rerank"):
+            ranked = await asyncio.to_thread(
+                apply_rerank, reranker, query, candidates, lambda c: c.content, top_k
+            )
+        span.set_attribute("agentide.rag.hits", len(ranked))
         return [
             SearchHit(
                 chunk_id=r.item.chunk_id,

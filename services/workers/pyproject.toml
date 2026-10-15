@@ -11,6 +11,7 @@ dependencies = [
     "agentide-rag",
     "agentide-agent-vision",  # reused by the vision queue task
     "agentide-agent-web",     # reused by the web-crawl queue task
+    "agentide-telemetry",     # OpenTelemetry → OpenObserve
 ]
 
 [dependency-groups]
@@ -30,3 +31,4 @@ agentide-schemas = { workspace = true }
 agentide-rag = { workspace = true }
 agentide-agent-vision = { workspace = true }
 agentide-agent-web = { workspace = true }
+agentide-telemetry = { workspace = true }

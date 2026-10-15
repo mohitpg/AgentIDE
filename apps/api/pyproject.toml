@@ -19,7 +19,8 @@ dependencies = [
     "agentide-schemas",
     "agentide-orchestrator",
     "agentide-rag",
-    "agentide-mcp",                     # MCP server registry + live discovery 
+    "agentide-mcp",                     # MCP server registry + live discovery
+    "agentide-telemetry",               # OpenTelemetry → OpenObserve
 ]
 
 [dependency-groups]
@@ -47,3 +48,4 @@ agentide-schemas = { workspace = true }
 agentide-orchestrator = { workspace = true }
 agentide-rag = { workspace = true }
 agentide-mcp = { workspace = true }
+agentide-telemetry = { workspace = true }

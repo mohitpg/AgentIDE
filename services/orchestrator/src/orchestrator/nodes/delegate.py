@@ -13,9 +13,12 @@ owns the single `DoneEvent` for the whole turn.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Protocol
 
 from langchain_core.messages import AIMessage
+from opentelemetry import metrics, trace
+from opentelemetry.trace import StatusCode
 from schemas.events import AgentStepEvent, Channel, ErrorEvent, TokenEvent
 
 from orchestrator.directory import AgentDirectory
@@ -23,6 +26,11 @@ from orchestrator.nodes.base import stream_writer
 from orchestrator.state import GraphState
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
+_delegation_duration = metrics.get_meter(__name__).create_histogram(
+    "agentide.agent.delegation.duration", unit="s",
+    description="Time for one specialist agent hop over A2A",
+)
 
 
 class A2AStreamClient(Protocol):
@@ -61,25 +69,38 @@ class DelegateNode:
         scope = {"user_id": state.get("user_id", ""), "project_id": state.get("project_id", "")}
 
         text, index, result = "", 0, {}
-        try:
-            async for ev in self._client.stream(base_url, skill, payload, run_id, scope=scope):
-                if ev.get("type") == "token":
-                    piece = ev["data"].get("content", "")
-                    text += piece
-                    # Intermediate step output → the UI's collapsible "Thinking" stream.
-                    writer(TokenEvent(run_id=run_id, data={
-                        "content": piece, "index": index, "channel": Channel.THINKING}))
-                    index += 1
-                elif ev.get("type") == "done":
-                    result = ev.get("data", {})
-            if not text:  # non-streaming agent: surface the result body
-                text = result.get("summary") or result.get("output") or result.get(
-                    "explanation", "")
-        except Exception as exc:  # agent down / network error — degrade gracefully
-            logger.exception("delegate to %s failed", agent_id)
-            writer(ErrorEvent(run_id=run_id, data={
-                "code": "a2a_unavailable", "message": str(exc), "recoverable": True}))
-            text = f"The {agent_id} agent is currently unavailable."
+        started, outcome = time.perf_counter(), "ok"
+        # The A2A call below carries this span's context (httpx propagates
+        # `traceparent`), so the agent's own spans nest under it.
+        with _tracer.start_as_current_span(f"delegate {agent_id}", attributes={
+            "agentide.agent.id": agent_id,
+            "agentide.agent.skill": str(skill or ""),
+            "agentide.step": state.get("step_count", 0),
+        }) as span:
+            try:
+                async for ev in self._client.stream(base_url, skill, payload, run_id, scope=scope):
+                    if ev.get("type") == "token":
+                        piece = ev["data"].get("content", "")
+                        text += piece
+                        # Intermediate step output → the UI's collapsible "Thinking" stream.
+                        writer(TokenEvent(run_id=run_id, data={
+                            "content": piece, "index": index, "channel": Channel.THINKING}))
+                        index += 1
+                    elif ev.get("type") == "done":
+                        result = ev.get("data", {})
+                if not text:  # non-streaming agent: surface the result body
+                    text = result.get("summary") or result.get("output") or result.get(
+                        "explanation", "")
+            except Exception as exc:  # agent down / network error — degrade gracefully
+                outcome = "error"
+                logger.exception("delegate to %s failed", agent_id)
+                span.record_exception(exc)
+                span.set_status(StatusCode.ERROR, str(exc))
+                writer(ErrorEvent(run_id=run_id, data={
+                    "code": "a2a_unavailable", "message": str(exc), "recoverable": True}))
+                text = f"The {agent_id} agent is currently unavailable."
+        _delegation_duration.record(time.perf_counter() - started, {
+            "agentide.agent.id": agent_id, "outcome": outcome})
 
         # Exit only — no DoneEvent here; the terminal `respond` node emits the
         # single DoneEvent once the whole turn is composed.
