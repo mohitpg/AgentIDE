@@ -21,7 +21,9 @@ from __future__ import annotations
 import os
 
 from celery import Celery
+from celery.signals import after_setup_logger
 from kombu import Exchange, Queue
+from telemetry import setup_telemetry
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://agentide:agentide@localhost:5672/")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -68,6 +70,18 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # fair dispatch for long tasks
     result_expires=3600,  # results live 1 h in Redis
 )
+
+
+# ── Telemetry ────────────────────────────────────────────────────────────────
+@after_setup_logger.connect(weak=False)
+def _setup_telemetry(**_kwargs: object) -> None:
+    """Start OpenTelemetry in worker / beat processes only.
+
+    Hooked after Celery configures logging because it replaces the root logger's
+    handlers, which would drop the OTLP log handler. Task spans continue the
+    gateway's trace through the task headers.
+    """
+    setup_telemetry("agentide-workers")
 
 # ── Scheduled jobs (Celery Beat) ──────────────────────────────────────────────
 celery_app.conf.beat_schedule = {

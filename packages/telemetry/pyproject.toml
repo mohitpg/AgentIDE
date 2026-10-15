@@ -1,0 +1,32 @@
+[project]
+name = "agentide-telemetry"
+version = "0.1.0"
+description = "OpenTelemetry bootstrap (traces, metrics, logs → OpenObserve) shared by every service"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-settings>=2.5",
+    "langchain-core>=0.3",                              # LLM callback handler
+    "opentelemetry-api>=1.45",
+    "opentelemetry-sdk>=1.45",
+    "opentelemetry-exporter-otlp-proto-http>=1.45",
+    "opentelemetry-instrumentation-logging>=0.66b1",    # stdlib logging → OTLP logs
+    "opentelemetry-instrumentation-asgi>=0.66b1",       # agent (Starlette) servers
+    "opentelemetry-instrumentation-fastapi>=0.66b1",    # gateway
+    "opentelemetry-instrumentation-httpx>=0.66b1",      # A2A, OpenRouter, Serper, gateway calls
+    "opentelemetry-instrumentation-asyncpg>=0.66b1",    # Postgres (SQLAlchemy + RAG)
+    "opentelemetry-instrumentation-redis>=0.66b1",
+    "opentelemetry-instrumentation-celery>=0.66b1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/telemetry"]

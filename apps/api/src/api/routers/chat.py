@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from opentelemetry import metrics, trace
+from opentelemetry.trace import StatusCode
 from pydantic import ValidationError
 from schemas.events import DoneEvent, ErrorEvent, TokenEvent
 from sqlalchemy import func, select
@@ -35,6 +38,10 @@ from api.schemas.chat import ChatRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_tracer = trace.get_tracer(__name__)
+_turn_duration = metrics.get_meter(__name__).create_histogram(
+    "agentide.chat.turn.duration", unit="s", description="End-to-end chat turn latency"
+)
 
 # Stored-image reference token
 _IMAGE_REF_RE = re.compile(r"<Image at db\.images\.([0-9a-fA-F-]{36})>")
@@ -138,26 +145,40 @@ async def chat_ws(websocket: WebSocket) -> None:
             # ── Stream the assistant turn ──────────────────────────────────────
             assistant_text = ""
             total_tokens = 0
-            try:
-                async for event in orchestrator.stream_chat(
-                    content=req.content,
-                    run_id=run_id,
-                    session_id=str(req.session_id),
-                    user_id=str(scope.user_id),
-                    project_id=str(scope.project_id),
-                    mode=req.mode,
-                ):
-                    await websocket.send_json(event.model_dump(mode="json"))
-                    if isinstance(event, TokenEvent):
-                        # Persist only the final answer; not intermediate "thinking"
-                        if event.data.get("channel", "final") != "thinking":
-                            assistant_text += event.data["content"]
-                    elif isinstance(event, DoneEvent):
-                        total_tokens = event.data.get("total_tokens", 0)
-            except Exception as exc:
-                logger.exception("chat run %s failed", run_id)
-                await _send_error(websocket, run_id, "run_failed", str(exc))
-                continue
+            started = time.perf_counter()
+            with _tracer.start_as_current_span("chat.turn", attributes={
+                "agentide.run_id": run_id,
+                "session.id": str(req.session_id),
+                "user.id": str(scope.user_id),
+                "agentide.project_id": str(scope.project_id),
+                "agentide.chat.mode": req.mode,
+            }) as span:
+                try:
+                    async for event in orchestrator.stream_chat(
+                        content=req.content,
+                        run_id=run_id,
+                        session_id=str(req.session_id),
+                        user_id=str(scope.user_id),
+                        project_id=str(scope.project_id),
+                        mode=req.mode,
+                    ):
+                        await websocket.send_json(event.model_dump(mode="json"))
+                        if isinstance(event, TokenEvent):
+                            # Persist only the final answer; not intermediate "thinking"
+                            if event.data.get("channel", "final") != "thinking":
+                                assistant_text += event.data["content"]
+                        elif isinstance(event, DoneEvent):
+                            total_tokens = event.data.get("total_tokens", 0)
+                except Exception as exc:
+                    logger.exception("chat run %s failed", run_id)
+                    span.record_exception(exc)
+                    span.set_status(StatusCode.ERROR, str(exc))
+                    _turn_duration.record(time.perf_counter() - started,
+                                          {"agentide.chat.mode": req.mode, "outcome": "error"})
+                    await _send_error(websocket, run_id, "run_failed", str(exc))
+                    continue
+            _turn_duration.record(time.perf_counter() - started,
+                                  {"agentide.chat.mode": req.mode, "outcome": "ok"})
 
             # ── Persist the assistant turn ─────────────────────────────────────
             if assistant_text:

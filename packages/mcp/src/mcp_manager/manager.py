@@ -24,11 +24,14 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from opentelemetry import trace
+
 from mcp_manager.config import MCPServerConfig
 from mcp_manager.connection import MCPToolInfo, connect_server
 from mcp_manager.tools import ExposedTool, exposed_name, to_openai_tool
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 
 class ConnectionLike(Protocol):
@@ -141,7 +144,13 @@ class MCPManager:
         conn = self._connections.get(et.server_id)
         if conn is None:  # pragma: no cover - resolve implies a live connection
             raise KeyError(f"MCP server '{et.server_id}' is not connected")
-        return await conn.call_tool(et.tool.name, arguments or {})
+        # GenAI semconv tool span; arguments and results are not recorded.
+        with _tracer.start_as_current_span(f"execute_tool {et.tool.name}", attributes={
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": et.tool.name,
+            "agentide.mcp.server": et.server_id,
+        }):
+            return await conn.call_tool(et.tool.name, arguments or {})
 
     def _resolve(self, name: str) -> ExposedTool | None:
         """Resolve a tool-call name to an exposed tool.

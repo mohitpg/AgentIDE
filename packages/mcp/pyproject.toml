@@ -7,6 +7,7 @@ dependencies = [
     "mcp>=1.0",
     "pydantic>=2.5",
     "agentide-schemas",
+    "opentelemetry-api>=1.45",  # tool-call spans (no-op unless the host process exports)
 ]
 
 [dependency-groups]

@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from langchain_openrouter import ChatOpenRouter
 from langchain_core.messages import SystemMessage
+from langchain_openrouter import ChatOpenRouter
+from telemetry import llm_callbacks
 
 SYSTEM_PROMPT = (
     "You are AgentIDE, a helpful coding assistant embedded in a desktop IDE. "
@@ -39,6 +40,7 @@ def build_chat_model(config: LLMConfig, *, streaming: bool = True) -> ChatOpenRo
         "temperature": config.temperature,
         "streaming": streaming,
         "stream_usage": True,
+        "callbacks": llm_callbacks(),  # a `chat {model}` span + token metrics per call
     }
     if config.api_key:
         kwargs["api_key"] = config.api_key

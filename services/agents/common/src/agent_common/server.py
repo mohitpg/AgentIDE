@@ -23,10 +23,12 @@ from collections.abc import AsyncIterator
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
+from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from telemetry import setup_telemetry
 
 from agent_common.base import BaseAgent
 from agent_common.config import AgentSettings, get_agent_settings
@@ -58,6 +60,9 @@ class BearerAuthMiddleware:
 def _agent_lifespan(agent: BaseAgent, settings: AgentSettings):
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        # Telemetry before anything else so startup itself is logged/traced; in
+        # the lifespan (not at import) so tests that build the app stay offline.
+        setup_telemetry(f"agentide-agent-{agent.id}")
         # Agent setup first (e.g. connect MCP servers) so the agent can serve
         # tool-backed requests as soon as it's registered.
         await agent.astartup()
@@ -116,4 +121,6 @@ def create_agent_app(
             "A2A_AUTH_TOKEN is unset: agent %s accepts unauthenticated requests "
             "(and the gateway will refuse its registration)", agent.id,
         )
+    # Added last so it's outermost: server span + HTTP metrics for every request
+    app.add_middleware(OpenTelemetryMiddleware, exclude_spans=["receive", "send"])
     return app

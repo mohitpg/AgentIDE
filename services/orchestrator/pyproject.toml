@@ -12,6 +12,7 @@ dependencies = [
     "agentide-schemas",
     "agentide-agent-common",        # A2AAgentClient for delegating to agents
     "langchain-openrouter>=0.2.3",
+    "agentide-telemetry",           # LLM-call spans + tracer/meter for graph nodes
 ]
 
 [dependency-groups]
@@ -35,3 +36,4 @@ testpaths = ["tests"]
 [tool.uv.sources]
 agentide-schemas = { workspace = true }
 agentide-agent-common = { workspace = true }
+agentide-telemetry = { workspace = true }

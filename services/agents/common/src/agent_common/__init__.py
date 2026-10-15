@@ -1,5 +1,9 @@
 """agentide-agent-common: shared A2A server base (real a2a-sdk) for all agents."""
 
+import os
+
+os.environ.setdefault("OTEL_INSTRUMENTATION_A2A_SDK_ENABLED", "false")
+
 from agent_common.base import BaseAgent
 from agent_common.client import A2AAgentClient
 from agent_common.config import AgentSettings, get_agent_settings

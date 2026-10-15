@@ -12,7 +12,9 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: E402
 from orchestrator import LLMConfig, Orchestrator  # noqa: E402
+from telemetry import setup_telemetry  # noqa: E402
 
 from api.config import get_settings  # noqa: E402
 from api.db.redis import redis_client  # noqa: E402
@@ -35,6 +37,9 @@ from api.services.task_events import TaskEventHub  # noqa: E402
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Not traced as HTTP requests
+_UNTRACED_URLS = "/health,/chat/ws,/tasks/ws,/agents/[^/]+/heartbeat"
 
 
 def _warn_on_insecure_config() -> None:
@@ -64,6 +69,7 @@ async def _agent_directory() -> dict[str, str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     # ── Startup ──────────────────────────────────────────────────────────────
+    setup_telemetry("agentide-api")
     _warn_on_insecure_config()
     orchestrator = Orchestrator(
         LLMConfig(
@@ -107,6 +113,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Server spans + HTTP metrics
+FastAPIInstrumentor.instrument_app(
+    app, excluded_urls=_UNTRACED_URLS, exclude_spans=["receive", "send"]
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
