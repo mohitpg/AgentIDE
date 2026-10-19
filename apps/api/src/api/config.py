@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
 
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    # Comma-separated browser origins allowed to call the API. The packaged
+    # desktop app serves its renderer from app://agentide. DEBUG=true allows any
+    # origin (e.g. the Vite dev server).
+    cors_origins: str = "app://agentide"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     # ── Database ─────────────────────────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://agentide:agentide@localhost:5433/agentide"
     # Sync URL used by Alembic migrations only

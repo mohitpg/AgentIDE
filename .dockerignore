@@ -1,0 +1,37 @@
+# Context for infra/docker/python.Dockerfile (built from the repo root). Only the
+# Python workspace goes in: no secrets, local envs, caches or desktop app.
+
+# Secrets and local environments
+.env
+.env.*
+**/.venv
+**/node_modules
+
+# VCS, editor and tooling state
+.git
+.github
+.claude
+.vscode
+.idea
+
+# Caches and build output
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/*.egg-info
+**/dist
+**/build
+**/*.log
+**/celerybeat-schedule*
+
+# Not part of any image
+**/tests
+apps/desktop
+infra/*
+!infra/docker
+# Root-level docs only; agent skills/*.md ship in the wheels.
+*.md

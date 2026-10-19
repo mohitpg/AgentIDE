@@ -42,6 +42,11 @@ class AgentSettings(BaseSettings):
     a2a_auth_token: str = ""
 
     # ── Agent registry ────────────────────────────────────────────────────────
+    # URL the gateway uses to reach this agent, advertised in its Agent Card and
+    # registry entry. Empty → http://localhost:<the agent's port> (local dev). Set
+    # per agent process (e.g. http://agent-code:8102 in the cluster), never in the
+    # shared .env, or every agent would advertise the same address.
+    agent_public_url: str = ""
     registry_enabled: bool = True
     gateway_url: str = "http://localhost:8000"
     registry_heartbeat_seconds: int = 30

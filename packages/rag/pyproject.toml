@@ -10,6 +10,7 @@ dependencies = [
     "tiktoken>=0.8",
     "fastembed>=0.4",            # local ONNX embeddings (BGE-small)
     "sentence-transformers>=3.0", # cross-encoder reranker
+    "torch",                     # via sentence-transformers; direct so the root CPU-only source applies
     "pypdf>=5.0",                # PDF text extraction
     "agentide-schemas",
     "opentelemetry-api>=1.45",   # pipeline-stage spans (no-op unless the host exports)

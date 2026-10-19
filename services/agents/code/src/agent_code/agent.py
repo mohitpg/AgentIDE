@@ -30,9 +30,10 @@ class CodeAgent(BaseAgent):
         settings: AgentSettings | None = None,
         **kwargs: object,
     ) -> None:
-        kwargs.setdefault("url", "http://localhost:8102")
+        settings = settings or get_agent_settings()
+        kwargs.setdefault("url", settings.agent_public_url or "http://localhost:8102")
         super().__init__(**kwargs)  # type: ignore[arg-type]
-        self._settings = settings or get_agent_settings()
+        self._settings = settings
         # An injected manager (tests) is owned by the caller; one we build here is
         # ours to connect and tear down.
         self._manager = mcp_manager

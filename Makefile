@@ -13,17 +13,21 @@ help: ## Show this help message
 	  | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 # ── Infra ────────────────────────────────────────────────────────────────────
-infra-up: ## Start Postgres+pgvector, Redis, RabbitMQ (detached)
-	docker compose -f infra/docker-compose.yml up -d --wait
+# The repo-root .env (when present) feeds compose's ${...} values, e.g. the
+# OpenObserve root user from OPENOBSERVE_EMAIL / OPENOBSERVE_PASSWORD.
+COMPOSE := docker compose -f infra/docker-compose.yml $(if $(wildcard .env),--env-file .env)
+
+infra-up: ## Start Postgres+pgvector, Redis, RabbitMQ, OpenObserve (detached)
+	$(COMPOSE) up -d --wait
 
 infra-down: ## Stop infra containers (keep volumes)
-	docker compose -f infra/docker-compose.yml down
+	$(COMPOSE) down
 
 infra-logs: ## Tail all infra container logs
-	docker compose -f infra/docker-compose.yml logs -f
+	$(COMPOSE) logs -f
 
 infra-reset: ## ⚠ Destroy infra containers AND volumes (data loss)
-	docker compose -f infra/docker-compose.yml down -v
+	$(COMPOSE) down -v
 
 # ── Install ───────────────────────────────────────────────────────────────────
 install: ## Install all Python workspace deps (uv) + desktop npm deps

@@ -56,7 +56,25 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── OpenObserve (traces, metrics, logs) ──────────────────────────────────
+  # UI → http://localhost:5080. The stack exports to the `default` org:
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5080/api/default
+  # The root user is created on first start from OPENOBSERVE_EMAIL /
+  # OPENOBSERVE_PASSWORD in the repo .env (`make infra-up` passes it in).
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v1.1.1
+    environment:
+      ZO_ROOT_USER_EMAIL: "${OPENOBSERVE_EMAIL:-root@agentide.local}"
+      ZO_ROOT_USER_PASSWORD: "${OPENOBSERVE_PASSWORD:-Complexpass#123}"
+      ZO_DATA_DIR: /data
+    ports:
+      - "5080:5080"
+    volumes:
+      - openobserve_data:/data
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
+  openobserve_data:

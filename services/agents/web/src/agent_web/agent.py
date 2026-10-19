@@ -92,7 +92,7 @@ class WebAgent(BaseAgent):
         fetch_timeout: float | None = None,
         **kwargs: object,
     ) -> None:
-        kwargs.setdefault("url", "http://localhost:8105")
+        kwargs.setdefault("url", get_agent_settings().agent_public_url or "http://localhost:8105")
         super().__init__(**kwargs)  # type: ignore[arg-type]
         s = get_agent_settings()
         # Omitting search_client → build the configured default (itself None when no

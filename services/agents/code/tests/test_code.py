@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from agent_code.agent import CodeAgent
 from agent_common import base as base_mod
+from agent_common.config import AgentSettings
 from agent_common.llm import LLMConfig
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
@@ -35,6 +36,16 @@ def test_card_shape():
     card = CodeAgent(llm_config=_cfg()).card
     assert card.name == "Code"
     assert {s.id for s in card.skills} == {"generate", "edit", "explain"}
+
+
+def test_card_url_defaults_to_local_port():
+    agent = CodeAgent(llm_config=_cfg(), settings=AgentSettings(agent_public_url=""))
+    assert agent.card.url == "http://localhost:8102"
+
+
+def test_card_url_uses_agent_public_url():
+    settings = AgentSettings(agent_public_url="http://agent-code:8102")
+    assert CodeAgent(llm_config=_cfg(), settings=settings).card.url == "http://agent-code:8102"
 
 
 @pytest.mark.asyncio
