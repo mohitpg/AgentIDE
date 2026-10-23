@@ -76,7 +76,7 @@ function App({ user, projects }: Props): JSX.Element {
   const tasks = useTasks()
   // Indexed-document list backing the Sources panel.
   const documents = useDocuments()
-  // Registered MCP servers backing the MCP settings panel.
+  // Local MCP servers + workspace folder, backing the MCP panel and folder chip.
   const mcp = useMcp()
 
   // Click a panel's toggle: open it, or close it if it's already the open one.
@@ -101,7 +101,7 @@ function App({ user, projects }: Props): JSX.Element {
             AgentIDE
           </span>
           <ProjectSwitcher projects={projects} />
-          <WorkspaceChip canChange={user.is_superuser} />
+          <WorkspaceChip mcp={mcp} />
         </div>
         <div className="app-header-right">
           <button

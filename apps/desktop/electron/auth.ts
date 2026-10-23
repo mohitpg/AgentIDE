@@ -17,7 +17,10 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 
-const API_BASE = process.env['AGENTIDE_API_URL'] ?? 'http://localhost:8000'
+// The backend, baked in at build time (vite.config.ts). An unpackaged (dev) app
+// can point elsewhere with AGENTIDE_API_URL; installers always use their own.
+export const API_BASE: string =
+  (!app.isPackaged && process.env['AGENTIDE_API_URL']) || __AGENTIDE_API_URL__
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000
 
 export interface AuthUser {
@@ -43,6 +46,8 @@ interface TokenResponse {
 }
 
 let refreshToken: string | null = null
+// The latest access token, for main-process callers (the MCP bridge).
+let access: { token: string; expiresAt: number } | null = null
 let refreshInFlight: Promise<AuthSession | null> | null = null
 let cancelPendingLogin: (() => void) | null = null
 
@@ -51,6 +56,7 @@ const sessionFile = (): string => path.join(app.getPath('userData'), 'session.bi
 
 function persist(token: string | null): void {
   refreshToken = token
+  if (token === null) access = null
   try {
     if (token === null) {
       fs.rmSync(sessionFile(), { force: true })
@@ -79,6 +85,7 @@ function loadPersisted(): string | null {
 
 function adopt(tokens: TokenResponse): AuthSession {
   persist(tokens.refresh_token)
+  access = { token: tokens.access_token, expiresAt: Date.now() + tokens.expires_in * 1000 }
   return { accessToken: tokens.access_token, expiresIn: tokens.expires_in, user: tokens.user }
 }
 
@@ -216,6 +223,15 @@ export function refresh(): Promise<AuthSession | null> {
     refreshInFlight = null
   })
   return refreshInFlight
+}
+
+// A current access token for main-process callers (the MCP bridge): the cached
+// one while it has a minute left, otherwise a refreshed one. Null once the
+// session is over; throws on network errors, like `refresh`.
+export async function accessToken(forceRefresh = false): Promise<string | null> {
+  if (!forceRefresh && access && access.expiresAt - Date.now() > 60_000) return access.token
+  const session = await refresh()
+  return session?.accessToken ?? null
 }
 
 export async function logout(): Promise<void> {

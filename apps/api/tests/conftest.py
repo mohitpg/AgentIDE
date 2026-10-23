@@ -12,6 +12,7 @@ dependencies, so router tests don't need a users/projects table or real tokens:
     user = auth.make_user(admin=False)
     auth.as_user(user, project_id)  # a signed-in user acting in a project
     auth.as_service()               # an agent using the service token
+    auth.as_service(user)           # ... acting for a user (X-On-Behalf-Of)
 """
 
 from __future__ import annotations
@@ -53,8 +54,10 @@ class AuthOverrides:
         app.dependency_overrides[get_scope] = lambda: scope
         return scope
 
-    def as_service(self) -> None:
-        app.dependency_overrides[get_principal] = lambda: Principal(user=None, is_service=True)
+    def as_service(self, on_behalf_of: User | None = None) -> None:
+        app.dependency_overrides[get_principal] = lambda: Principal(
+            user=on_behalf_of, is_service=True
+        )
         app.dependency_overrides.pop(get_scope, None)
 
     def clear(self) -> None:

@@ -1,4 +1,6 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron'
+
+import type { CustomServerInput, McpState, ServerPatch, WorkspaceInfo } from './mcp/types'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -24,8 +26,13 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 })
 
 // --------- Expose backend API base URL to Renderer ---------
+// The main process decides it (electron/auth.ts) and passes it as a launch
+// argument, so the renderer and main always talk to the same backend.
+const API_URL_ARG = '--agentide-api-url='
 contextBridge.exposeInMainWorld('api', {
-  baseUrl: process.env['AGENTIDE_API_URL'] ?? 'http://localhost:8000',
+  baseUrl:
+    process.argv.find((arg) => arg.startsWith(API_URL_ARG))?.slice(API_URL_ARG.length) ??
+    'http://localhost:8000',
 })
 
 // --------- Google sign-in (flow + refresh token live in the main process) ---------
@@ -35,7 +42,28 @@ contextBridge.exposeInMainWorld('auth', {
   logout: () => ipcRenderer.invoke('auth:logout'),
 })
 
-// --------- Workspace folder picker (native OS dialog) ---------
+// --------- Local MCP servers (run by the main process, see electron/mcp) ---------
+contextBridge.exposeInMainWorld('mcp', {
+  get: (): Promise<McpState> => ipcRenderer.invoke('mcp:get'),
+  add: (server: CustomServerInput): Promise<McpState> => ipcRenderer.invoke('mcp:add', server),
+  update: (id: string, patch: ServerPatch): Promise<McpState> =>
+    ipcRenderer.invoke('mcp:update', id, patch),
+  remove: (id: string): Promise<McpState> => ipcRenderer.invoke('mcp:remove', id),
+  restart: (id: string): Promise<McpState> => ipcRenderer.invoke('mcp:restart', id),
+  reconnect: (): Promise<McpState> => ipcRenderer.invoke('mcp:reconnect'),
+  // Pushed whenever a server or the backend link changes; returns an unsubscribe.
+  onChange: (listener: (state: McpState) => void): (() => void) => {
+    const handler = (_event: IpcRendererEvent, state: McpState) => listener(state)
+    ipcRenderer.on('mcp:changed', handler)
+    return () => {
+      ipcRenderer.off('mcp:changed', handler)
+    }
+  },
+})
+
+// --------- Workspace folder (roots the filesystem + git MCP servers) ---------
 contextBridge.exposeInMainWorld('workspace', {
-  selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectFolder'),
+  get: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke('workspace:get'),
+  // Native folder picker; resolves to the new workspace, or null if cancelled.
+  pick: (): Promise<WorkspaceInfo | null> => ipcRenderer.invoke('workspace:pick'),
 })

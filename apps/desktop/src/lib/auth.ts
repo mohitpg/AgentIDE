@@ -53,7 +53,7 @@ export function useAuth(): AuthState {
 }
 
 // Electron wraps main-process errors as "Error invoking remote method 'x': Error: msg".
-function cleanError(err: unknown): string {
+export function cleanError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   return msg.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }

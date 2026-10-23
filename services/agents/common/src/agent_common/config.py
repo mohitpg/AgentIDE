@@ -52,8 +52,8 @@ class AgentSettings(BaseSettings):
     registry_heartbeat_seconds: int = 30
 
     # ── MCP ────────────────────────────────────────────────────────────────────
+    # Offer the user's desktop MCP tools (via the gateway relay) to tool-using agents.
     mcp_enabled: bool = True
-    mcp_workspace_dir: str = ""
 
 
 @lru_cache

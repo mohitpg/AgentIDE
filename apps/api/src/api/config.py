@@ -76,9 +76,8 @@ class Settings(BaseSettings):
     # the secret and does the code exchange, so it never reaches Electron.
     google_client_id: str = ""
     google_client_secret: str = ""
-    # Comma-separated emails that are made admins on sign-in. Admins manage the
-    # host-wide resources (MCP servers, workspace folder). Empty → the first user
-    # to sign in becomes the admin.
+    # Comma-separated emails that are made admins on sign-in. Empty → the first
+    # user to sign in becomes the admin.
     auth_admin_emails: str = ""
 
     @property
@@ -115,9 +114,10 @@ class Settings(BaseSettings):
     image_max_upload_bytes: int = 10_000_000  # 10 MB upload cap
 
     # ── MCP ──────────────────────────────────────────────────────────────────
-    # Default sandbox root used by the built-in filesystem/git server templates
-    # offered at GET /mcp/builtins. Empty → the API process's working directory.
-    mcp_workspace_dir: str = ""
+    # How long an agent's tool call waits for the user's desktop, which may be
+    # asking the user to confirm a write. Keep it under the supervisor's A2A
+    # read timeout (agent_common.client) so the agent can still answer.
+    mcp_relay_timeout_seconds: float = 120.0
 
     # ── Observability ─────────────────────────────────────────────────────────
     langchain_tracing_v2: bool = False

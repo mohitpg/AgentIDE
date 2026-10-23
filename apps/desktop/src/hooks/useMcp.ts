@@ -1,83 +1,105 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import {
-  createMcpServer,
-  deleteMcpServer,
-  discoverMcpServer,
-  listMcpBuiltins,
-  listMcpServers,
-  updateMcpServer,
-  type MCPServerCreate,
-  type MCPServerUpdate,
-} from '../lib/api'
-import type { MCPDiscoverResponse, MCPServer } from '../types'
+import { cleanError } from '../lib/auth'
+import type { CustomServerInput, McpState, ServerPatch } from '../types'
+
+type McpApi = NonNullable<Window['mcp']>
 
 export interface UseMcp {
-  servers: MCPServer[]
-  builtins: MCPServerCreate[]
+  // null until the first state arrives, and always outside the desktop app.
+  state: McpState | null
+  available: boolean
+  // The last failed action, for the panel to show.
   error: string | null
-  refresh: () => void
-  add: (body: MCPServerCreate) => Promise<void>
-  update: (id: string, body: MCPServerUpdate) => Promise<void>
+  // Resolves to an error message, or null once the server is added.
+  add: (server: CustomServerInput) => Promise<string | null>
+  update: (id: string, patch: ServerPatch) => Promise<void>
   remove: (id: string) => Promise<void>
-  discover: (id: string) => Promise<MCPDiscoverResponse>
+  restart: (id: string) => Promise<void>
+  reconnect: () => Promise<void>
+  pickWorkspace: () => Promise<void>
 }
 
 /**
- * Owns the registered MCP server list + the built-in templates. CRUD calls
- * re-sync from the backend so the list always reflects server state; `discover`
- * connects a server live and returns its tools (not cached — it's an action).
+ * The local MCP servers, run by the desktop's main process and lent to the
+ * cloud agents over the bridge. The main process pushes a fresh state whenever
+ * a server or the backend link changes; actions also return one.
  */
 export function useMcp(): UseMcp {
-  const [servers, setServers] = useState<MCPServer[]>([])
-  const [builtins, setBuiltins] = useState<MCPServerCreate[]>([])
+  const [state, setState] = useState<McpState | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback((): void => {
-    listMcpServers()
-      .then((s) => {
-        setServers(s)
-        setError(null)
-      })
-      .catch((e: Error) => setError(e.message))
+  useEffect(() => {
+    const api = window.mcp
+    if (!api) return
+    let live = true
+    void api.get().then((s) => {
+      if (live) setState(s)
+    })
+    const unsubscribe = api.onChange(setState)
+    return () => {
+      live = false
+      unsubscribe()
+    }
   }, [])
 
-  useEffect(() => {
-    refresh()
-    listMcpBuiltins()
-      .then(setBuiltins)
-      .catch(() => {
-        /* templates are a convenience; ignore if backend is down */
-      })
-  }, [refresh])
+  // Run an IPC action; returns its error message (also kept in `error`), or null.
+  const run = useCallback(async (action: (api: McpApi) => Promise<McpState>) => {
+    if (!window.mcp) return 'Local tools need the AgentIDE desktop app.'
+    try {
+      setState(await action(window.mcp))
+      setError(null)
+      return null
+    } catch (err) {
+      const message = cleanError(err)
+      setError(message)
+      return message
+    }
+  }, [])
 
-  const add = useCallback(
-    async (body: MCPServerCreate): Promise<void> => {
-      await createMcpServer(body)
-      refresh()
-    },
-    [refresh],
-  )
-
+  const add = useCallback((server: CustomServerInput) => run((api) => api.add(server)), [run])
   const update = useCallback(
-    async (id: string, body: MCPServerUpdate): Promise<void> => {
-      // Optimistic: patch the row in place, then re-sync to confirm.
-      setServers((prev) => prev.map((s) => (s.id === id ? { ...s, ...body } : s)))
-      await updateMcpServer(id, body)
-      refresh()
+    async (id: string, patch: ServerPatch): Promise<void> => {
+      await run((api) => api.update(id, patch))
     },
-    [refresh],
+    [run],
   )
-
   const remove = useCallback(
     async (id: string): Promise<void> => {
-      await deleteMcpServer(id)
-      setServers((prev) => prev.filter((s) => s.id !== id))
+      await run((api) => api.remove(id))
     },
-    [],
+    [run],
   )
+  const restart = useCallback(
+    async (id: string): Promise<void> => {
+      await run((api) => api.restart(id))
+    },
+    [run],
+  )
+  const reconnect = useCallback(async (): Promise<void> => {
+    await run((api) => api.reconnect())
+  }, [run])
 
-  const discover = useCallback((id: string) => discoverMcpServer(id), [])
+  const pickWorkspace = useCallback(async (): Promise<void> => {
+    const api = window.mcp
+    if (!api || !window.workspace) return
+    try {
+      if (await window.workspace.pick()) setState(await api.get())
+      setError(null)
+    } catch (err) {
+      setError(cleanError(err))
+    }
+  }, [])
 
-  return { servers, builtins, error, refresh, add, update, remove, discover }
+  return {
+    state,
+    available: Boolean(window.mcp),
+    error,
+    add,
+    update,
+    remove,
+    restart,
+    reconnect,
+    pickWorkspace,
+  }
 }

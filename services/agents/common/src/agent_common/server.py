@@ -25,9 +25,7 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 from starlette.applications import Starlette
-from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Route
 from telemetry import setup_telemetry
 
 from agent_common.base import BaseAgent
@@ -63,8 +61,8 @@ def _agent_lifespan(agent: BaseAgent, settings: AgentSettings):
         # Telemetry before anything else so startup itself is logged/traced; in
         # the lifespan (not at import) so tests that build the app stay offline.
         setup_telemetry(f"agentide-agent-{agent.id}")
-        # Agent setup first (e.g. connect MCP servers) so the agent can serve
-        # tool-backed requests as soon as it's registered.
+        # Agent setup first so the agent can serve requests as soon as it's
+        # registered.
         await agent.astartup()
 
         manager: RegistrationManager | None = None
@@ -97,22 +95,6 @@ def create_agent_app(
     )
     app_builder = A2AStarletteApplication(agent_card=agent.card, http_handler=handler)
     app = app_builder.build(lifespan=_agent_lifespan(agent, settings))
-
-    async def set_workspace(request: Request) -> JSONResponse:
-        """POST /admin/workspace {"path": ...} — re-root the agent at runtime.
-
-        The gateway calls this on every live agent when the user switches folders;
-        agents that aren't directory-scoped inherit the no-op default and just ack.
-        """
-        data = await request.json()
-        path = (data or {}).get("path", "")
-        if not path:
-            return JSONResponse({"error": "path required"}, status_code=400)
-        await agent.set_workspace(path)
-        return JSONResponse({"ok": True, "workspace": path})
-
-    # Prepend so our exact-path route is matched before the A2A JSON-RPC handler.
-    app.router.routes.insert(0, Route("/admin/workspace", set_workspace, methods=["POST"]))
 
     if settings.a2a_auth_token:
         app.add_middleware(BearerAuthMiddleware, token=settings.a2a_auth_token)

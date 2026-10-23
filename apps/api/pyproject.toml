@@ -30,6 +30,7 @@ dev = [
     "httpx>=0.27",
     "anyio>=4.6",
     "aiosqlite>=0.20",   # in-memory DB for registry unit tests
+    "fakeredis>=2.26",   # in-memory Redis for the MCP bridge hub tests
 ]
 
 [build-system]

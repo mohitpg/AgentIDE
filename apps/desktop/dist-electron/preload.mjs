@@ -1,4 +1,5 @@
 "use strict";
+var _a;
 const electron = require("electron");
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
@@ -20,14 +21,33 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   // You can expose other APTs you need here.
   // ...
 });
+const API_URL_ARG = "--agentide-api-url=";
 electron.contextBridge.exposeInMainWorld("api", {
-  baseUrl: process.env["AGENTIDE_API_URL"] ?? "http://localhost:8000"
+  baseUrl: ((_a = process.argv.find((arg) => arg.startsWith(API_URL_ARG))) == null ? void 0 : _a.slice(API_URL_ARG.length)) ?? "http://localhost:8000"
 });
 electron.contextBridge.exposeInMainWorld("auth", {
   login: () => electron.ipcRenderer.invoke("auth:login"),
   refresh: () => electron.ipcRenderer.invoke("auth:refresh"),
   logout: () => electron.ipcRenderer.invoke("auth:logout")
 });
+electron.contextBridge.exposeInMainWorld("mcp", {
+  get: () => electron.ipcRenderer.invoke("mcp:get"),
+  add: (server) => electron.ipcRenderer.invoke("mcp:add", server),
+  update: (id, patch) => electron.ipcRenderer.invoke("mcp:update", id, patch),
+  remove: (id) => electron.ipcRenderer.invoke("mcp:remove", id),
+  restart: (id) => electron.ipcRenderer.invoke("mcp:restart", id),
+  reconnect: () => electron.ipcRenderer.invoke("mcp:reconnect"),
+  // Pushed whenever a server or the backend link changes; returns an unsubscribe.
+  onChange: (listener) => {
+    const handler = (_event, state) => listener(state);
+    electron.ipcRenderer.on("mcp:changed", handler);
+    return () => {
+      electron.ipcRenderer.off("mcp:changed", handler);
+    };
+  }
+});
 electron.contextBridge.exposeInMainWorld("workspace", {
-  selectFolder: () => electron.ipcRenderer.invoke("dialog:selectFolder")
+  get: () => electron.ipcRenderer.invoke("workspace:get"),
+  // Native folder picker; resolves to the new workspace, or null if cancelled.
+  pick: () => electron.ipcRenderer.invoke("workspace:pick")
 });

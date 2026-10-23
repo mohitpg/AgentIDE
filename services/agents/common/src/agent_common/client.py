@@ -50,7 +50,10 @@ def _artifact_text(event: TaskArtifactUpdateEvent) -> str:
 class A2AAgentClient:
     """Talks to an A2A agent over JSON-RPC streaming."""
 
-    def __init__(self, *, auth_token: str = "", timeout: float = 60.0) -> None:
+    # `timeout` is also the longest silence allowed between stream events. A
+    # tool-using agent streams nothing while a relayed MCP call waits for the
+    # user to confirm it on their desktop (up to MCP_RELAY_TIMEOUT_SECONDS).
+    def __init__(self, *, auth_token: str = "", timeout: float = 300.0) -> None:
         self._auth_token = auth_token
         self._timeout = timeout
 

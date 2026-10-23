@@ -103,38 +103,17 @@ export interface RagSearchResponse {
   hits: RagSearchHit[]
 }
 
-// ── MCP servers ───────────────────────────────────────────────────
-export type MCPTransport = 'stdio' | 'sse'
-
-export interface MCPServer {
-  id: string
-  name: string
-  description: string | null
-  transport: MCPTransport
-  command: string
-  args: string[]
-  env: Record<string, string>
-  cwd: string | null
-  url: string
-  enabled: boolean
-  allowed_agents: string[]
-  tool_allowlist: string[]
-  created_at: string
-  updated_at: string
-}
-
-export interface MCPTool {
-  name: string
-  description: string
-  input_schema: Record<string, unknown>
-}
-
-export interface MCPDiscoverResponse {
-  server_id: string
-  connected: boolean
-  tools: MCPTool[]
-  error: string | null
-}
+// ── MCP servers (local; run by the desktop's main process) ─────────
+export type {
+  BridgeStatus,
+  CustomServerInput,
+  McpServerView,
+  McpState,
+  McpToolView,
+  McpTransport,
+  ServerPatch,
+  WorkspaceInfo,
+} from '../electron/mcp/types'
 
 // Agents the UI can assign MCP servers to (mirrors the agent/skill catalog).
 export const KNOWN_AGENTS = ['code', 'rag', 'summarizer', 'vision', 'web'] as const

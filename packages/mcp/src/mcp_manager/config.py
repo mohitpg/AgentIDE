@@ -2,11 +2,9 @@
 MCP server configuration + built-in server definitions.
 
 An `MCPServerConfig` is a transport-agnostic description of one MCP server:
-how to launch/reach it, and who may use it. The same shape is used three ways:
-
-  - persisted in Postgres (the gateway's ``mcp_servers`` table / settings UI),
-  - sent to agents over ``GET /mcp/agent/{agent_id}``,
-  - handed to the `MCPManager` to actually connect.
+how to launch/reach it, and who may use it. The deployed stack runs MCP servers
+in the desktop app; the gateway uses this shape only for the exposure rules the
+desktop reports with its inventory (`allows_agent` / `allows_tool`).
 
 Exposure is two-layered so the settings UI can be coarse or fine-grained:
   - `allowed_agents` — which agents may use this server (empty = all),
