@@ -1,0 +1,6 @@
+# agentide-dev: small volumes, a short backup window.
+postgres:
+  storage:
+    size: 5Gi
+  backup:
+    retention: 7d

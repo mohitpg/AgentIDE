@@ -1,0 +1,97 @@
+{{- $mq := .Values.rabbitmq -}}
+{{- $sel := include "agentide-data.selectorLabels" (dict "root" $ "name" "rabbitmq") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    # Management UI: kubectl port-forward svc/rabbitmq 15672
+    - name: management
+      port: 15672
+      targetPort: management
+---
+# Governing service for the StatefulSet (stable pod DNS).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-headless
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  serviceName: rabbitmq-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentide-data.labels" . | nindent 8 }}
+        {{- $sel | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 60
+      # The node name is rabbit@<hostname>, and the StatefulSet keeps the
+      # hostname (rabbitmq-0) stable, so the node finds its data after a restart.
+      containers:
+        - name: rabbitmq
+          image: {{ $mq.image }}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: {{ $mq.user | quote }}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $mq.passwordSecret.name }}
+                  key: {{ $mq.passwordSecret.key }}
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 6
+          resources:
+            {{- toYaml $mq.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+  # Immutable once created: resizing means editing the PVC, not this value.
+  volumeClaimTemplates:
+    {{- include "agentide-data.volumeClaim" $mq.storage | nindent 4 }}

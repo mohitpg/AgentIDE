@@ -1,0 +1,15 @@
+AgentIDE data services in namespace {{ .Release.Namespace }}:
+
+  Postgres  {{ .Values.postgres.name }}-rw:5432   (app user secret: {{ .Values.postgres.name }}-app)
+  Redis     redis:6379
+  RabbitMQ  rabbitmq:5672                (password secret: {{ .Values.rabbitmq.passwordSecret.name }})
+
+Check them:
+  kubectl -n {{ .Release.Namespace }} get cluster {{ .Values.postgres.name }}
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- if .Values.postgres.backup.enabled }}
+  kubectl -n {{ .Release.Namespace }} get backups
+{{- end }}
+
+The app chart (infra/helm/agentide) can be deployed to this namespace once the
+cluster reports "Cluster in healthy state".

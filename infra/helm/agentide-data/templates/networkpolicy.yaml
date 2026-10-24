@@ -1,0 +1,23 @@
+{{- if .Values.networkPolicy.enabled }}
+# Redis and RabbitMQ accept connections only from pods in this namespace.
+# kubectl port-forward and the exec probes don't go through the pod network, so
+# they still work.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentide-data-same-namespace
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [redis, rabbitmq]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+{{- end }}

@@ -1,0 +1,25 @@
+{{- $env := include "agentide.env" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentide-config
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ $env | quote }}
+  DEBUG: "false"
+  CORS_ORIGINS: {{ .Values.config.corsOrigins | quote }}
+  AUTH_ADMIN_EMAILS: {{ .Values.config.authAdminEmails | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  REDIS_URL: {{ .Values.redis.url | quote }}
+  # The gateway's in-cluster address: agents register and fetch images here,
+  # and beat checks the registry.
+  GATEWAY_URL: "http://api:8000"
+  # Under the /data mount (the uploads bucket) in the api and worker pods.
+  RAG_UPLOAD_DIR: /data/uploads
+  IMAGE_UPLOAD_DIR: /data/images
+  OTEL_ENABLED: {{ .Values.telemetry.enabled | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.telemetry.endpoint | default (printf "http://openobserve.observability:5080/api/%s" $env) | quote }}
+  {{- range $name, $value := .Values.config.extraEnv }}
+  {{ $name }}: {{ $value | quote }}
+  {{- end }}

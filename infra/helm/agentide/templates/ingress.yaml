@@ -1,0 +1,73 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := required "ingress.host is required, e.g. dev-api.<ip-dashed>.sslip.io" .Values.ingress.host }}
+{{- $ipName := .Values.ingress.staticIpName | default (printf "agentide-%s-ip" (include "agentide.env" .)) }}
+# External HTTP(S) load balancer for the api, on the env's reserved global IP.
+# The certificate provisions once the host resolves to that IP (sslip.io does
+# that by name) and can take 15-60 minutes on the first deploy.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+  annotations:
+    # GKE reads the class from this annotation, not spec.ingressClassName.
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ $ipName }}
+    networking.gke.io/managed-certificates: api
+    networking.gke.io/v1beta1.FrontendConfig: api
+spec:
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  name: http
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: api
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+spec:
+  domains:
+    - {{ $host }}
+---
+# Backend service settings for the api Service.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: api
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+spec:
+  # The default 30 s would cut every WebSocket and long chat stream.
+  timeoutSec: {{ .Values.ingress.timeoutSec }}
+  connectionDraining:
+    drainingTimeoutSec: 60
+  # The load balancer's own health check; /health answers 200 (with a "degraded"
+  # status) even when Postgres or Redis is down.
+  healthCheck:
+    type: HTTP
+    requestPath: /health
+    port: 8000
+    checkIntervalSec: 15
+    timeoutSec: 5
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: api
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+{{- end }}

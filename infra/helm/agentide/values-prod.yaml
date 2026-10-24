@@ -1,0 +1,14 @@
+# agentide-prod, deployed on a published GitHub Release. CI adds gcp.project,
+# gcp.region, ingress.host (api.<ip-dashed>.sslip.io) and image.tag (vX.Y.Z).
+env: prod
+
+config:
+  # Set to your account so the first stranger to sign in isn't made admin.
+  authAdminEmails: ""
+
+api:
+  replicas: 1  # see values.yaml: TaskEventHub runs in every api pod
+
+worker:
+  replicas: 1
+  concurrency: 2

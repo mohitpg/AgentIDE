@@ -1,0 +1,74 @@
+{{- $sel := include "agentide.selectorLabels" (dict "root" $ "name" "migrate") -}}
+{{- $image := include "agentide.image" (dict "root" $ "name" "api") -}}
+# `alembic upgrade head` before every install/upgrade. As a pre-* hook it runs
+# before this release's own objects exist, so it uses only what the data chart
+# made: the CNPG app secret. A failed migration fails the deploy (and --atomic
+# rolls it back); the failed Job is kept for `kubectl logs`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentide-migrate
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        {{- include "agentide.labels" . | nindent 8 }}
+        {{- $sel | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "agentide.podSecurityContext" . | nindent 8 }}
+      initContainers:
+        # A fresh namespace's Postgres can still be initializing.
+        - name: wait-for-postgres
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - python
+            - -c
+            - |
+              import asyncio, os
+              import asyncpg
+
+              async def main() -> None:
+                  for _ in range(60):
+                      try:
+                          conn = await asyncpg.connect(os.environ["DATABASE_URL_PSYCOPG"], timeout=5)
+                      except Exception as exc:
+                          print(f"waiting for postgres: {exc}", flush=True)
+                          await asyncio.sleep(5)
+                      else:
+                          await conn.close()
+                          return
+                  raise SystemExit("gave up waiting for postgres")
+
+              asyncio.run(main())
+          env:
+            {{- include "agentide.databaseEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          securityContext:
+            {{- include "agentide.containerSecurityContext" . | nindent 12 }}
+      containers:
+        - name: migrate
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # alembic.ini and migrations/ are copied to /app in the api image.
+          workingDir: /app
+          args: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "agentide.databaseEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          securityContext:
+            {{- include "agentide.containerSecurityContext" . | nindent 12 }}

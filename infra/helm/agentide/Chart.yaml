@@ -1,0 +1,8 @@
+apiVersion: v2
+name: agentide
+description: >-
+  AgentIDE backend for one environment namespace: the API gateway (with its
+  Ingress), the A2A agents, the Celery worker and beat, and the migration Job.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

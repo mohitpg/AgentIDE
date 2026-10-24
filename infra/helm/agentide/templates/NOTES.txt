@@ -1,0 +1,13 @@
+AgentIDE {{ include "agentide.env" . }} ({{ .Values.image.tag }}) in namespace {{ .Release.Namespace }}.
+{{- if .Values.ingress.enabled }}
+
+API: https://{{ .Values.ingress.host }}
+  curl https://{{ .Values.ingress.host }}/health
+
+On the first deploy the certificate takes a while to provision:
+  kubectl -n {{ .Release.Namespace }} describe managedcertificate api
+{{- end }}
+
+Pods and registered agents:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/api

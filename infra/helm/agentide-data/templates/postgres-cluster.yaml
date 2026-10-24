@@ -1,0 +1,49 @@
+{{- $pg := .Values.postgres -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $pg.name }}
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  instances: {{ $pg.instances }}
+  imageName: {{ $pg.imageName }}
+  primaryUpdateStrategy: unsupervised
+  # With one instance a PodDisruptionBudget would block every node drain, and
+  # Autopilot upgrades would stall for an hour before force-evicting the pod.
+  enablePDB: {{ gt (int $pg.instances) 1 }}
+
+  bootstrap:
+    initdb:
+      database: {{ $pg.database }}
+      owner: {{ $pg.owner }}
+      # Runs as the superuser in the app database. The owner isn't a superuser,
+      # so migration 0005's CREATE EXTENSION IF NOT EXISTS is then a no-op.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+
+  {{- with $pg.parameters }}
+  postgresql:
+    parameters:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+
+  storage:
+    size: {{ $pg.storage.size }}
+    {{- with $pg.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+
+  resources:
+    {{- toYaml $pg.resources | nindent 4 }}
+
+  {{- if $pg.backup.enabled }}
+  # WAL archiving through the Barman Cloud plugin; base backups come from the
+  # ScheduledBackup in postgres-backup.yaml.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ $pg.name }}-backups
+  {{- end }}

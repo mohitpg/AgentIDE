@@ -1,0 +1,81 @@
+{{- $r := .Values.redis -}}
+{{- $sel := include "agentide-data.selectorLabels" (dict "root" $ "name" "redis") -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+# Governing service for the StatefulSet (stable pod DNS).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  serviceName: redis-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentide-data.labels" . | nindent 8 }}
+        {{- $sel | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ $r.image }}
+          # The image entrypoint chowns /data and drops to the redis user when the
+          # command starts with redis-server.
+          args: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml $r.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  # Immutable once created: resizing means editing the PVC, not this value.
+  volumeClaimTemplates:
+    {{- include "agentide-data.volumeClaim" $r.storage | nindent 4 }}

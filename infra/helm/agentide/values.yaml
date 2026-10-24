@@ -1,0 +1,175 @@
+# AgentIDE backend for one environment namespace (agentide-dev / agentide-prod).
+# Needs, in the same namespace: the agentide-data chart (Postgres, Redis,
+# RabbitMQ) and the app secret named by `secretName`. CI deploys it with:
+#
+#   helm upgrade --install agentide infra/helm/agentide -n agentide-dev \
+#     -f infra/helm/agentide/values-dev.yaml \
+#     --set gcp.project=$GCP_PROJECT --set gcp.region=$GCP_REGION \
+#     --set ingress.host=$API_HOST --set image.tag=sha-<short> \
+#     --atomic --wait --timeout 15m
+
+# dev or prod (set by values-<env>.yaml). APP_ENV in every pod, and it names the
+# OpenObserve org, the uploads bucket and the static IP.
+env: ""
+
+gcp:
+  project: ""  # required unless image.registry and uploads.bucket are both set
+  region: us-central1
+
+image:
+  # Empty = <region>-docker.pkg.dev/<project>/agentide. A component's image is
+  # <registry>/<name>:<tag>, with name api, workers or agent-<id>.
+  registry: ""
+  tag: ""  # required: sha-<short commit> (dev) or vX.Y.Z (release)
+  pullPolicy: IfNotPresent
+
+# Secret holding the app's credentials as env vars. The deploy workflow applies
+# it from the GitHub environment secrets: SECRET_KEY, A2A_AUTH_TOKEN,
+# OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, SERPER_API_KEY,
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OPENOBSERVE_AUTH_TOKEN. The api and
+# worker get all of it, the agents and beat only the keys they name.
+secretName: agentide-secrets
+# A hash of that secret's contents, set by CI. The secret isn't part of the
+# release, so this pod annotation is what restarts pods when it changes.
+secretsChecksum: ""
+
+# ── Data services (the agentide-data chart) ──────────────────────────────────
+postgres:
+  # CNPG Cluster name: the URL uses its <cluster>-rw service and the app user
+  # from its <cluster>-app secret.
+  cluster: agentide-pg
+  database: agentide
+redis:
+  url: redis://redis:6379/0
+rabbitmq:
+  host: rabbitmq
+  user: agentide
+  # The secret the data chart's RabbitMQ was initialized from.
+  passwordSecret:
+    name: agentide-rabbitmq
+    key: password
+
+# ── Shared settings (the agentide-config ConfigMap) ──────────────────────────
+config:
+  # Browser origins allowed by CORS. The packaged desktop renderer is served
+  # from app://agentide.
+  corsOrigins: app://agentide
+  # Comma-separated emails made admins on sign-in. Empty = the first user to
+  # sign in becomes the admin, so set it before anyone else can reach prod.
+  authAdminEmails: ""
+  logLevel: INFO
+  # Any other setting as NAME: value, e.g. OPENROUTER_MODEL.
+  extraEnv: {}
+
+telemetry:
+  enabled: true
+  # Empty = http://openobserve.observability:5080/api/<env> (one org per env).
+  endpoint: ""
+
+# ── Uploads ──────────────────────────────────────────────────────────────────
+# RAG documents and chat images go to a GCS bucket, mounted at /data in the api
+# and worker pods by the Cloud Storage FUSE CSI driver (on by default on
+# Autopilot). The api stages a file and the worker reads it from the same path.
+uploads:
+  enabled: true
+  bucket: ""  # empty = <project>-agentide-uploads-<env>
+  # The images run as 10001:10001.
+  mountOptions: implicit-dirs,uid=10001,gid=10001,file-mode=0660,dir-mode=0770
+
+# The api and worker pods' ServiceAccount. bootstrap.sh grants it the uploads
+# bucket by Workload Identity principal, so it needs no annotation. Add
+# iam.gke.io/gcp-service-account here to impersonate a Google SA instead.
+serviceAccount:
+  name: agentide
+  annotations: {}
+
+# ── API gateway (FastAPI + in-process orchestrator) ──────────────────────────
+api:
+  # Keep at 1: every api pod's TaskEventHub persists every task event, so more
+  # replicas would duplicate the writes. A rolling update overlaps two pods for
+  # a few seconds; both apply the same status transitions.
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 2Gi
+
+ingress:
+  enabled: true
+  host: ""          # required: api.<ip-dashed>.sslip.io (prod), dev-api.… (dev)
+  staticIpName: ""  # empty = agentide-<env>-ip (a reserved global static IP)
+  # The load balancer's backend timeout, which also caps how long a WebSocket
+  # (chat, tasks, MCP bridge) stays open. Clients reconnect when it's cut.
+  timeoutSec: 3600
+
+# ── Celery ───────────────────────────────────────────────────────────────────
+worker:
+  replicas: 1
+  # Prefork children per pod. Each loads the embedding and reranker models.
+  concurrency: 2
+  resources:
+    requests:
+      cpu: "1"
+      memory: 3Gi
+    limits:
+      memory: 3Gi
+
+# Celery beat (the registry health check). Always one replica.
+beat:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      memory: 384Mi
+
+# ── A2A agents ───────────────────────────────────────────────────────────────
+# One Deployment + ClusterIP Service per entry, named agent-<id>, using the
+# agent-<id> image. `port` is the one the agent's __main__ listens on.
+agentDefaults:
+  # Keys from secretName every agent gets.
+  secretKeys: [A2A_AUTH_TOKEN, OPENROUTER_API_KEY, OPENOBSERVE_AUTH_TOKEN]
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 512Mi
+
+agents:
+  summarizer:
+    enabled: true
+    port: 8101
+  code:
+    enabled: true
+    port: 8102
+  rag:
+    enabled: true
+    port: 8103
+    database: true  # reads pgvector directly
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        memory: 2Gi
+  vision:
+    enabled: true
+    port: 8104
+  web:
+    enabled: true
+    port: 8105
+    secretKeys: [SERPER_API_KEY]
+
+# ── Migrations ───────────────────────────────────────────────────────────────
+# `alembic upgrade head` from the api image, as a pre-install/pre-upgrade hook,
+# so new code never starts against an old schema.
+migrate:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 512Mi

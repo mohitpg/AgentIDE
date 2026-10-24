@@ -1,0 +1,85 @@
+{{- range $id, $agent := .Values.agents }}
+{{- if $agent.enabled }}
+{{- $name := printf "agent-%s" $id }}
+{{- $sel := include "agentide.selectorLabels" (dict "root" $ "name" $name) }}
+---
+# The {{ $id }} A2A agent. It registers itself with the gateway on start and
+# heartbeats; the supervisor reaches it through the Service below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "agentide.labels" $ | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  # One replica: A2A tasks live in the pod's in-memory task store.
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentide.labels" $ | nindent 8 }}
+        {{- $sel | nindent 8 }}
+      annotations:
+        {{- include "agentide.podAnnotations" $ | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "agentide.podSecurityContext" $ | nindent 8 }}
+      containers:
+        - name: agent
+          image: {{ include "agentide.image" (dict "root" $ "name" $name) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: a2a
+              containerPort: {{ $agent.port }}
+          envFrom:
+            - configMapRef:
+                name: agentide-config
+          env:
+            # Advertised in the Agent Card and the registry entry.
+            - name: AGENT_PUBLIC_URL
+              value: "http://{{ $name }}:{{ $agent.port }}"
+            {{- include "agentide.secretKeyEnv" (dict "root" $ "keys" (concat $.Values.agentDefaults.secretKeys ($agent.secretKeys | default (list)))) | nindent 12 }}
+            {{- if $agent.database }}
+            {{- include "agentide.databaseEnv" $ | nindent 12 }}
+            {{- end }}
+          # The Agent Card is the one route that needs no A2A token.
+          readinessProbe:
+            httpGet:
+              path: /.well-known/agent-card.json
+              port: a2a
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: a2a
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml ($agent.resources | default $.Values.agentDefaults.resources) | nindent 12 }}
+          securityContext:
+            {{- include "agentide.containerSecurityContext" $ | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "agentide.labels" $ | nindent 4 }}
+    {{- $sel | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- $sel | nindent 4 }}
+  ports:
+    - name: a2a
+      port: {{ $agent.port }}
+      targetPort: a2a
+{{- end }}
+{{- end }}

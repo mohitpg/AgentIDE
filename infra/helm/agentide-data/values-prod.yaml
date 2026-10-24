@@ -1,0 +1,16 @@
+# agentide-prod
+postgres:
+  storage:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      memory: 2Gi
+  backup:
+    retention: 30d
+
+rabbitmq:
+  storage:
+    size: 5Gi

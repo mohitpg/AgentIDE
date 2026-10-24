@@ -1,0 +1,9 @@
+apiVersion: v2
+name: agentide-data
+description: >-
+  Data services for one AgentIDE environment namespace: Postgres + pgvector
+  (CloudNativePG), Redis and RabbitMQ. Installed once per namespace and kept out
+  of app deploys.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

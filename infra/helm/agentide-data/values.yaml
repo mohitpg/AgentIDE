@@ -1,0 +1,97 @@
+# Data services for one AgentIDE environment namespace. Installed once per
+# namespace by infra/gcp/bootstrap.sh, separately from the app chart, so an app
+# deploy (or a failed one rolled back by --atomic) never touches data.
+#
+#   helm upgrade --install agentide-data infra/helm/agentide-data \
+#     -n agentide-dev -f infra/helm/agentide-data/values-dev.yaml \
+#     --set postgres.backup.bucket=<project>-agentide-pg-backups
+#
+# Requires the CloudNativePG operator and, with backups on, the Barman Cloud
+# plugin (both in cnpg-system). Mirrors infra/docker-compose.yml.
+
+# ── Postgres 16 + pgvector (CloudNativePG) ───────────────────────────────────
+postgres:
+  # Cluster name. The app chart derives the read-write service (<name>-rw) and
+  # the app user's secret (<name>-app) from it, and the operator names the
+  # instances' ServiceAccount after it (the backup Workload Identity binding).
+  name: agentide-pg
+  instances: 1
+  # CNPG "standard" image: core Postgres plus pgvector. A rolling major tag; pin
+  # a fully qualified one (e.g. 16.10-202509090953-standard-trixie) for repeatable
+  # rebuilds.
+  imageName: ghcr.io/cloudnative-pg/postgresql:16-standard-trixie
+  # Database and its owner, the non-superuser the app connects as. CNPG
+  # generates the owner's password into the <name>-app secret.
+  database: agentide
+  owner: agentide
+  storage:
+    size: 10Gi
+    storageClass: ""  # empty = the cluster default (standard-rwo on Autopilot)
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 1Gi
+  # postgresql.conf overrides, e.g. {max_connections: "200"}.
+  parameters: {}
+
+  # Base backups + WAL archive to GCS through the Barman Cloud plugin. The
+  # instances authenticate with Workload Identity: bootstrap.sh grants the
+  # <name> ServiceAccount in this namespace access to the bucket.
+  backup:
+    enabled: true
+    bucket: ""         # required when enabled: <project>-agentide-pg-backups
+    path: ""           # folder in the bucket; empty = the release namespace
+    retention: 30d     # recovery window, <n>[dwm]
+    schedule: "0 0 3 * * *"  # CNPG cron has a seconds field: daily 03:00 UTC
+    # The plugin's sidecar in each instance pod. Autopilot charges for requests,
+    # and defaults them high when unset.
+    sidecarResources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 256Mi
+
+# ── Redis 7 ──────────────────────────────────────────────────────────────────
+# Cache, Celery results, pub/sub (task events, MCP relay) and the desktop MCP
+# inventories. No auth: reachable only from this namespace (see networkPolicy).
+redis:
+  image: redis:7-alpine
+  storage:
+    size: 1Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 256Mi
+
+# ── RabbitMQ 3.13 (Celery broker) ────────────────────────────────────────────
+rabbitmq:
+  image: rabbitmq:3.13-management-alpine
+  user: agentide
+  # Existing secret holding the user's password (bootstrap.sh creates it). The
+  # app chart reads the same secret to build RABBITMQ_URL. RabbitMQ only applies
+  # it when the data volume is empty, so changing it later needs
+  # `rabbitmqctl change_password` too.
+  passwordSecret:
+    name: agentide-rabbitmq
+    key: password
+  storage:
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 512Mi
+
+# Only pods in the same namespace may connect to Redis and RabbitMQ, so dev and
+# prod can't reach each other's unauthenticated Redis. Postgres is left out: the
+# CNPG operator talks to its instances from cnpg-system.
+networkPolicy:
+  enabled: true

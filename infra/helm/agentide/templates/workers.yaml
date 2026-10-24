@@ -1,0 +1,114 @@
+{{- $workerSel := include "agentide.selectorLabels" (dict "root" $ "name" "worker") -}}
+{{- $beatSel := include "agentide.selectorLabels" (dict "root" $ "name" "beat") -}}
+# Celery worker: indexing, web and default queues, prefork pool.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+    {{- $workerSel | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- $workerSel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentide.labels" . | nindent 8 }}
+        {{- $workerSel | nindent 8 }}
+      annotations:
+        {{- include "agentide.podAnnotations" . | nindent 8 }}
+        {{- if .Values.uploads.enabled }}
+        gke-gcsfuse/volumes: "true"
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        {{- include "agentide.podSecurityContext" . | nindent 8 }}
+      # SIGTERM starts Celery's warm shutdown: running tasks get this long to
+      # finish. With acks_late, a task cut off here is redelivered.
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: worker
+          image: {{ include "agentide.image" (dict "root" $ "name" "workers") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - celery
+            - -A
+            - workers.app:celery_app
+            - worker
+            - --loglevel=info
+            - -Q
+            - default,indexing,web
+            - --concurrency={{ .Values.worker.concurrency }}
+          envFrom:
+            - configMapRef:
+                name: agentide-config
+            - secretRef:
+                name: {{ .Values.secretName }}
+          env:
+            {{- include "agentide.databaseEnv" . | nindent 12 }}
+            {{- include "agentide.rabbitmqEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- include "agentide.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        {{- include "agentide.dataVolume" . | nindent 8 }}
+---
+# Celery beat: exactly one, so Recreate rather than a rolling overlap that
+# would fire each schedule twice.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beat
+  labels:
+    {{- include "agentide.labels" . | nindent 4 }}
+    {{- $beatSel | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- $beatSel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentide.labels" . | nindent 8 }}
+        {{- $beatSel | nindent 8 }}
+      annotations:
+        {{- include "agentide.podAnnotations" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "agentide.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: beat
+          image: {{ include "agentide.image" (dict "root" $ "name" "workers") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - celery
+            - -A
+            - workers.app:celery_app
+            - beat
+            - --loglevel=info
+            # Schedule state is disposable; keep it out of /app.
+            - --schedule=/tmp/celerybeat-schedule
+          envFrom:
+            - configMapRef:
+                name: agentide-config
+          env:
+            {{- include "agentide.secretKeyEnv" (dict "root" $ "keys" (list "OPENOBSERVE_AUTH_TOKEN")) | nindent 12 }}
+            {{- include "agentide.rabbitmqEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+          securityContext:
+            {{- include "agentide.containerSecurityContext" . | nindent 12 }}

@@ -1,0 +1,44 @@
+{{- $pg := .Values.postgres -}}
+{{- if $pg.backup.enabled }}
+{{- $bucket := required "postgres.backup.bucket is required when postgres.backup.enabled is true" $pg.backup.bucket }}
+# Where the Barman Cloud plugin writes base backups and WAL: gs://<bucket>/<path>/<cluster>/.
+# Credentials come from Workload Identity (the instances' ServiceAccount, named
+# after the cluster), so there's no key secret.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $pg.name }}-backups
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+spec:
+  retentionPolicy: {{ $pg.backup.retention | quote }}
+  configuration:
+    destinationPath: {{ printf "gs://%s/%s" $bucket ($pg.backup.path | default .Release.Namespace) | quote }}
+    googleCredentials:
+      gkeEnvironment: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  instanceSidecarConfiguration:
+    resources:
+      {{- toYaml $pg.backup.sidecarResources | nindent 6 }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $pg.name }}-daily
+  labels:
+    {{- include "agentide-data.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $pg.backup.schedule | quote }}
+  # Take the first base backup right away: the WAL archive can't be restored
+  # without one.
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: {{ $pg.name }}
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

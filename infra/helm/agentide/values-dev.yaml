@@ -1,0 +1,15 @@
+# agentide-dev, deployed on every push to main. CI adds gcp.project,
+# gcp.region, ingress.host (dev-api.<ip-dashed>.sslip.io) and image.tag.
+env: dev
+
+config:
+  logLevel: DEBUG
+
+worker:
+  concurrency: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 2Gi
