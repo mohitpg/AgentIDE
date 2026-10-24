@@ -2,8 +2,8 @@
 {{- $image := include "agentide.image" (dict "root" $ "name" "api") -}}
 # `alembic upgrade head` before every install/upgrade. As a pre-* hook it runs
 # before this release's own objects exist, so it uses only what the data chart
-# made: the CNPG app secret. A failed migration fails the deploy (and --atomic
-# rolls it back); the failed Job is kept for `kubectl logs`.
+# made: the CNPG app secret. A failed migration fails the deploy (and
+# --rollback-on-failure rolls it back); the failed Job is kept for `kubectl logs`.
 apiVersion: batch/v1
 kind: Job
 metadata:

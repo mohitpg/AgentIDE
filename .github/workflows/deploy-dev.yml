@@ -1,0 +1,64 @@
+name: Deploy dev
+
+# Every push to main: checks, then images tagged sha-<short>, then a deploy to
+# agentide-dev, then desktop installers for the dev API as workflow artifacts.
+# Run it by hand (workflow_dispatch) to put another branch on dev.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Runs go one at a time, in order. A newer push waiting here replaces an older
+# waiting one, so dev always ends on the latest commit, never an older one.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  meta:
+    name: Image tag
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.image-tag }}
+    steps:
+      - id: tag
+        run: echo "image-tag=sha-${GITHUB_SHA::7}" >>"$GITHUB_OUTPUT"
+
+  images:
+    name: Images
+    needs: [ci, meta]
+    uses: ./.github/workflows/build-images.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      tag: ${{ needs.meta.outputs.image-tag }}
+
+  deploy:
+    name: Deploy
+    needs: [meta, images]
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: dev
+      env: dev
+      image-tag: ${{ needs.meta.outputs.image-tag }}
+    secrets: inherit
+
+  desktop:
+    name: Desktop
+    needs: deploy
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      api-url: ${{ needs.deploy.outputs.api-url }}
+      artifact-prefix: agentide-desktop-dev

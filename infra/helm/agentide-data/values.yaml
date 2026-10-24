@@ -1,6 +1,6 @@
 # Data services for one AgentIDE environment namespace. Installed once per
 # namespace by infra/gcp/bootstrap.sh, separately from the app chart, so an app
-# deploy (or a failed one rolled back by --atomic) never touches data.
+# deploy (or a failed one that gets rolled back) never touches data.
 #
 #   helm upgrade --install agentide-data infra/helm/agentide-data \
 #     -n agentide-dev -f infra/helm/agentide-data/values-dev.yaml \

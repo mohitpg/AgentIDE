@@ -1,0 +1,78 @@
+name: Build desktop
+
+# Reusable: builds the unsigned desktop installers (NSIS, DMG, AppImage) with
+# the given API URL baked in, and uploads each OS's installer as the workflow
+# artifact <artifact-prefix>-<OS>.
+
+on:
+  workflow_call:
+    inputs:
+      api-url:
+        description: Backend the installers talk to, e.g. https://dev-api.<ip-dashed>.sslip.io
+        type: string
+        required: true
+      version:
+        description: App version (X.Y.Z); empty keeps package.json's
+        type: string
+        default: ""
+      artifact-prefix:
+        description: Artifact name prefix; each OS appends -Windows, -macOS or -Linux
+        type: string
+        required: true
+      retention-days:
+        type: number
+        default: 14
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - run: npm ci
+
+      - name: Build installer
+        env:
+          # Read by vite.config.ts and baked into the main process.
+          AGENTIDE_API_URL: ${{ inputs.api-url }}
+          VERSION: ${{ inputs.version }}
+          # Unsigned builds: don't look for a signing identity on macOS.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          args=(--publish never)
+          if [ -n "$VERSION" ]; then
+            args+=("-c.extraMetadata.version=$VERSION")
+          fi
+          # Appended to the build script, so they reach electron-builder.
+          npm run build -- "${args[@]}"
+
+      # Only the installers (see artifactName in electron-builder.json5), not
+      # the unpacked app or blockmaps. They're already compressed.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ runner.os }}
+          path: |
+            apps/desktop/release/*/AgentIDE-Windows-*-Setup.exe
+            apps/desktop/release/*/AgentIDE-Mac-*-Installer.dmg
+            apps/desktop/release/*/AgentIDE-Linux-*.AppImage
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention-days }}

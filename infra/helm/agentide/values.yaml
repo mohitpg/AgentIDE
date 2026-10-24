@@ -6,7 +6,7 @@
 #     -f infra/helm/agentide/values-dev.yaml \
 #     --set gcp.project=$GCP_PROJECT --set gcp.region=$GCP_REGION \
 #     --set ingress.host=$API_HOST --set image.tag=sha-<short> \
-#     --atomic --wait --timeout 15m
+#     --rollback-on-failure --wait --timeout 15m       # Helm 4
 
 # dev or prod (set by values-<env>.yaml). APP_ENV in every pod, and it names the
 # OpenObserve org, the uploads bucket and the static IP.

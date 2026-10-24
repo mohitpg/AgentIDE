@@ -1,0 +1,202 @@
+name: Release
+
+# A published GitHub Release (tag vX.Y.Z) ships the images that already ran on
+# dev. The workflow retags sha-<short> as vX.Y.Z, so the digests are the same,
+# and deploys them to agentide-prod (the "production" environment; add
+# required reviewers there for an approval gate). It then builds the
+# installers for the prod API and attaches them to the release.
+#
+# If the release commit was never built (e.g. it skipped main, or the registry
+# cleanup removed its images), the images are built first.
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/agentide
+  # Keep in step with the matrix in build-images.yml.
+  IMAGES: api workers agent-summarizer agent-code agent-rag agent-vision agent-web
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  meta:
+    name: Release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      sha-tag: ${{ steps.meta.outputs.sha-tag }}
+      release-tag: ${{ steps.meta.outputs.release-tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - id: meta
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # The tag is also the image tag and (without the v) the app version.
+          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::release tag '$TAG' isn't vMAJOR.MINOR.PATCH[-PRERELEASE]"
+            exit 1
+          fi
+          {
+            echo "sha-tag=sha-${GITHUB_SHA::7}"
+            echo "release-tag=$TAG"
+            echo "version=$version"
+          } >>"$GITHUB_OUTPUT"
+
+  check-images:
+    name: Find the tested images
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      missing: ${{ steps.check.outputs.missing }}
+    env:
+      SHA_TAG: ${{ needs.meta.outputs.sha-tag }}
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+          token_format: access_token
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: check
+        run: |
+          missing=false
+          for image in $IMAGES; do
+            if docker buildx imagetools inspect "$REGISTRY/$image:$SHA_TAG" >/dev/null 2>&1; then
+              echo "found $image:$SHA_TAG"
+            else
+              echo "::notice::$image:$SHA_TAG isn't in the registry; building the images for this release"
+              missing=true
+            fi
+          done
+          echo "missing=$missing" >>"$GITHUB_OUTPUT"
+
+  images:
+    name: Images
+    needs: [ci, meta, check-images]
+    if: needs.check-images.outputs.missing == 'true'
+    uses: ./.github/workflows/build-images.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      tag: ${{ needs.meta.outputs.sha-tag }}
+
+  promote:
+    name: Promote images
+    needs: [ci, meta, check-images, images]
+    # `images` is skipped when the tested images already exist.
+    if: >-
+      ${{ !cancelled() && needs.ci.result == 'success' && needs.check-images.result == 'success'
+      && (needs.images.result == 'success' || needs.images.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SHA_TAG: ${{ needs.meta.outputs.sha-tag }}
+      RELEASE_TAG: ${{ needs.meta.outputs.release-tag }}
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+          token_format: access_token
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ vars.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Tag ${{ needs.meta.outputs.sha-tag }} as ${{ needs.meta.outputs.release-tag }}
+        shell: bash
+        run: |
+          for image in $IMAGES; do
+            src="$REGISTRY/$image:$SHA_TAG"
+            dst="$REGISTRY/$image:$RELEASE_TAG"
+            # --prefer-index=false copies the manifest as is, instead of
+            # wrapping it in a new index with a different digest.
+            docker buildx imagetools create --prefer-index=false --tag "$dst" "$src"
+            # Same manifest bytes = same digest.
+            if ! cmp -s <(docker buildx imagetools inspect --raw "$src") \
+                        <(docker buildx imagetools inspect --raw "$dst"); then
+              echo "::error::$dst doesn't point at the same manifest as $src"
+              exit 1
+            fi
+            echo "$dst = $src"
+          done
+
+  deploy:
+    name: Deploy
+    needs: [meta, promote]
+    # Explicit: a skipped `images` job further up would otherwise skip this too.
+    if: ${{ !cancelled() && needs.promote.result == 'success' }}
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: production
+      env: prod
+      image-tag: ${{ needs.meta.outputs.release-tag }}
+    secrets: inherit
+
+  desktop:
+    name: Desktop
+    needs: [meta, deploy]
+    if: ${{ !cancelled() && needs.deploy.result == 'success' }}
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      api-url: ${{ needs.deploy.outputs.api-url }}
+      version: ${{ needs.meta.outputs.version }}
+      artifact-prefix: agentide-desktop
+      retention-days: 7
+
+  publish-desktop:
+    name: Attach installers
+    needs: [meta, desktop]
+    if: ${{ !cancelled() && needs.desktop.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: agentide-desktop-*
+          path: installers
+          merge-multiple: true
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.release-tag }}
+        run: |
+          ls -l installers
+          gh release upload "$TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"

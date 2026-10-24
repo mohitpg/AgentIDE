@@ -1,0 +1,179 @@
+name: Deploy
+
+# Reusable: deploys infra/helm/agentide to one environment's namespace on the
+# GKE cluster. It applies the app secret from the GitHub environment's secrets,
+# then runs `helm upgrade --install` and waits for the rollout. The caller must
+# grant id-token: write and pass `secrets: inherit`.
+#
+# Repository variables: GCP_PROJECT, GCP_REGION, WIF_PROVIDER, DEPLOYER_SA and
+# optionally GKE_CLUSTER (default agentide). Environment variables: API_HOST
+# and optionally AUTH_ADMIN_EMAILS.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment for the secrets and API_HOST (dev or production)
+        type: string
+        required: true
+      env:
+        description: Chart environment (dev or prod), for namespace agentide-<env> and values-<env>.yaml
+        type: string
+        required: true
+      image-tag:
+        description: Tag of the images to run (sha-<short> or vX.Y.Z)
+        type: string
+        required: true
+    outputs:
+      api-url:
+        description: The environment's public API URL
+        value: ${{ jobs.deploy.outputs.api-url }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://${{ vars.API_HOST }}
+    # Never two Helm operations on one release at once. A queued deploy waits;
+    # it's never cancelled midway, which could leave the release stuck. (Not
+    # named like a caller's workflow-level group: GitHub cancels that as a
+    # deadlock.)
+    concurrency:
+      group: helm-agentide-${{ inputs.env }}
+      cancel-in-progress: false
+    outputs:
+      api-url: https://${{ vars.API_HOST }}
+    defaults:
+      run:
+        # Explicit, for pipefail: GitHub's implicit bash runs without it.
+        shell: bash
+    env:
+      GH_ENVIRONMENT: ${{ inputs.environment }}
+      CHART_ENV: ${{ inputs.env }}
+      NAMESPACE: agentide-${{ inputs.env }}
+      IMAGE_TAG: ${{ inputs.image-tag }}
+      GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      API_HOST: ${{ vars.API_HOST }}
+    steps:
+      - name: Check variables
+        env:
+          WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+          DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
+        run: |
+          status=0
+          for name in GCP_PROJECT GCP_REGION WIF_PROVIDER DEPLOYER_SA API_HOST; do
+            if [ -z "${!name}" ]; then
+              echo "::error::variable $name is not set (repository, or the $GH_ENVIRONMENT environment)"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER || 'agentide' }}
+          location: ${{ vars.GCP_REGION }}
+          project_id: ${{ vars.GCP_PROJECT }}
+
+      # Helm 4: --rollback-on-failure replaced --atomic.
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.1
+
+      # The chart reads the app's credentials from this secret. Unset optional
+      # keys are left out, so the app falls back to its defaults. Server-side
+      # apply keeps the values out of a last-applied annotation, and drops keys
+      # removed since the last deploy.
+      - name: Apply app secret
+        id: secret
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          A2A_AUTH_TOKEN: ${{ secrets.A2A_AUTH_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          OPENOBSERVE_AUTH_TOKEN: ${{ secrets.OPENOBSERVE_AUTH_TOKEN }}
+        run: |
+          # Without these the API is insecure (forgeable tokens, open agents).
+          required=(SECRET_KEY A2A_AUTH_TOKEN)
+          optional=(OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY SERPER_API_KEY
+                    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET OPENOBSERVE_AUTH_TOKEN)
+          for key in "${required[@]}"; do
+            if [ -z "${!key}" ]; then
+              echo "::error::secret $key is not set in the $GH_ENVIRONMENT environment"
+              exit 1
+            fi
+          done
+
+          umask 077
+          env_file="$RUNNER_TEMP/agentide-secrets.env"
+          : >"$env_file"
+          for key in "${required[@]}" "${optional[@]}"; do
+            if [ -n "${!key}" ]; then
+              printf '%s=%s\n' "$key" "${!key}" >>"$env_file"
+            else
+              echo "::warning::secret $key is not set in the $GH_ENVIRONMENT environment"
+            fi
+          done
+
+          kubectl -n "$NAMESPACE" create secret generic agentide-secrets \
+              --from-env-file "$env_file" --dry-run=client -o yaml |
+            kubectl apply --server-side --field-manager github-actions --force-conflicts -f -
+          # Passed to the chart so pods restart when a secret changes.
+          echo "checksum=$(sha256sum "$env_file" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+          rm -f "$env_file"
+
+      - name: Helm upgrade
+        env:
+          SECRETS_CHECKSUM: ${{ steps.secret.outputs.checksum }}
+          AUTH_ADMIN_EMAILS: ${{ vars.AUTH_ADMIN_EMAILS }}
+        run: |
+          args=(
+            --namespace "$NAMESPACE"
+            -f "infra/helm/agentide/values-$CHART_ENV.yaml"
+            --set-string "gcp.project=$GCP_PROJECT"
+            --set-string "gcp.region=$GCP_REGION"
+            --set-string "ingress.host=$API_HOST"
+            --set-string "image.tag=$IMAGE_TAG"
+            --set-string "secretsChecksum=$SECRETS_CHECKSUM"
+          )
+          # Only when set, so it doesn't blank a value from values-<env>.yaml.
+          # --set splits on commas; escape the list's.
+          if [ -n "$AUTH_ADMIN_EMAILS" ]; then
+            args+=(--set-string "config.authAdminEmails=${AUTH_ADMIN_EMAILS//,/\\,}")
+          fi
+          helm upgrade --install agentide infra/helm/agentide "${args[@]}" \
+            --rollback-on-failure --wait --timeout 15m
+
+      - name: Show what failed
+        if: failure()
+        run: |
+          kubectl -n "$NAMESPACE" get pods -o wide || true
+          kubectl -n "$NAMESPACE" logs job/agentide-migrate --all-containers --tail 100 || true
+          kubectl -n "$NAMESPACE" get events --sort-by .lastTimestamp | tail -n 40 || true
+
+      # Through the load balancer. Only warns: on the first deploy the
+      # certificate takes 15-60 minutes to provision.
+      - name: Check /health
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error --max-time 10 \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            "https://$API_HOST/health"

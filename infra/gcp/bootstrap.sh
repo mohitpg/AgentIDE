@@ -336,6 +336,9 @@ EOF
     echo "  $env: API_HOST = $host   ($(ip_name "$env") = $ip)"
   done
   cat <<'EOF'
+Optional per environment: AUTH_ADMIN_EMAILS (comma-separated; set it for
+production so the first sign-in isn't made admin). Optional repository
+variable: GKE_CLUSTER, if the cluster isn't named agentide.
 
 Environment secrets (both environments): SECRET_KEY, A2A_AUTH_TOKEN,
 OPENROUTER_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, SERPER_API_KEY,
