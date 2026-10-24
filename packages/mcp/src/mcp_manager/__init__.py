@@ -10,9 +10,9 @@ Pieces:
   - `MCPManager`                          — lifecycle, capability discovery, and
                                             per-agent tool exposure + dispatch.
 
-Agents act as MCP clients: they load their assigned configs, run an `MCPManager`,
-and bind the exposed tools onto their LLM. The gateway stores the configs and
-does on-demand discovery; the manager itself is transport/storage agnostic.
+In the deployed stack the MCP servers run in the desktop app, and agents reach
+them through the gateway relay (`agent_common.mcp_tools.RelayToolManager`); the
+gateway and agents use this package for configs, tool naming and rendering.
 """
 
 from __future__ import annotations

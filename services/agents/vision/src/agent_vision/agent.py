@@ -86,7 +86,7 @@ class VisionAgent(BaseAgent):
         image_fetcher: ImageFetcher | None = None,
         **kwargs: object,
     ) -> None:
-        kwargs.setdefault("url", "http://localhost:8104")
+        kwargs.setdefault("url", get_agent_settings().agent_public_url or "http://localhost:8104")
         # Default to a multimodal model unless the caller injected an explicit config.
         if "llm_config" not in kwargs:
             kwargs["llm_config"] = vision_llm_config()

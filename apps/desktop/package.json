@@ -1,7 +1,8 @@
 {
   "name": "desktop",
+  "author": "Mohit P Gupta mohitp.gupta1102@gmail.com",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +17,8 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^7.1.1",

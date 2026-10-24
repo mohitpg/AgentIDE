@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build output (electron-builder installers, vite main/preload bundles)
+release
+dist-electron

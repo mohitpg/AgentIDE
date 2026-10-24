@@ -1,15 +1,22 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.mohitpg.agentide",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "AgentIDE",
+  // The version comes from package.json; release CI overrides it with the tag:
+  //   electron-builder -c.extraMetadata.version=1.2.3
   "directories": {
     "output": "release/${version}"
   },
   "files": [
     "dist",
     "dist-electron"
+  ],
+  // Unpacked so Electron-as-Node can run dist-electron/mcp-filesystem.js (and
+  // the chunks it shares with main.js) as plain files.
+  "asarUnpack": [
+    "dist-electron/**"
   ],
   "mac": {
     "target": [

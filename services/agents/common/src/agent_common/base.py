@@ -66,19 +66,11 @@ class BaseAgent(ABC):
     async def astartup(self) -> None:
         """Called once when the A2A app starts. Default: nothing.
 
-        Tool-using agents override this to connect their MCP servers
+        Agents override this to set up long-lived resources (clients, models).
         """
 
     async def ashutdown(self) -> None:
         """Called once when the A2A app stops. Mirror of `astartup`."""
-
-    async def set_workspace(self, workspace: str) -> None:
-        """Re-root the agent in ``workspace`` at runtime. Default: nothing.
-
-        Agents whose tools are scoped to a directory (e.g. the code agent's
-        filesystem/git MCP servers) override this to rebuild those tools against
-        the new path. Called by the gateway when the user switches folders.
-        """
 
     # ── A2A Agent Card ─────────────────────────────────────────────────────────
     @property

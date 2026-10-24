@@ -1163,25 +1163,51 @@
 }
 .mcp-conn-error { color: #f87171; }
 
-/* Quick-add built-in templates */
-.mcp-builtins { display: flex; flex-direction: column; gap: 6px; }
-.mcp-builtins-label, .mcp-agents-label {
+/* Backend link, workspace, setup hints */
+.mcp-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #1f1f1f;
+  border-radius: 10px;
+  background: #161616;
+  padding: 9px 12px;
+}
+.mcp-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex-shrink: 0; }
+.mcp-dot.connected { background: #4ade80; }
+.mcp-dot.connecting { background: #facc15; }
+.mcp-dot.offline, .mcp-dot.replaced { background: #f87171; }
+.mcp-status-text { flex: 1; font-size: 0.76rem; color: #bbb; line-height: 1.4; }
+.mcp-status-detail { display: block; font-size: 0.7rem; color: #777; }
+.mcp-link-btn {
+  flex-shrink: 0;
+  border: 1px solid #2a2a5a;
+  background: #1e2147;
+  color: #c7c9ff;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.mcp-link-btn:hover { background: #262a55; }
+.mcp-workspace { display: flex; flex-direction: column; gap: 6px; }
+.mcp-workspace-row { display: flex; align-items: center; gap: 8px; }
+.mcp-workspace-row .mcp-cmd { flex: 1; min-width: 0; }
+.mcp-hint {
+  font-size: 0.72rem;
+  color: #d6b656;
+  background: #221d0d;
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.45;
+}
+.mcp-agents-label {
   font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #666;
 }
-.mcp-builtin-chips, .mcp-agent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.mcp-builtin-chip {
-  border: 1px dashed #2e2e4a;
-  background: #15172b;
-  color: #9ea2e8;
-  border-radius: 6px;
-  padding: 3px 9px;
-  font-size: 0.72rem;
-  cursor: pointer;
-}
-.mcp-builtin-chip:hover { background: #1e2147; color: #c7c9ff; }
+.mcp-agent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Add-custom form */
 .mcp-form {
@@ -1237,7 +1263,7 @@
   cursor: pointer;
 }
 .mcp-name { font-size: 0.85rem; font-weight: 600; color: #ddd; }
-.mcp-transport {
+.mcp-state {
   font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1245,6 +1271,16 @@
   background: #1f1f1f;
   border-radius: 4px;
   padding: 2px 6px;
+}
+.mcp-state.connected { color: #4ade80; background: #11301c; }
+.mcp-state.connecting { color: #facc15; background: #2d2a10; }
+.mcp-state.error { color: #f87171; background: #2a1719; }
+.mcp-desc { font-size: 0.74rem; color: #8a8a8a; line-height: 1.4; }
+.mcp-card-error {
+  font-size: 0.7rem;
+  color: #f87171;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .mcp-cmd {
   display: block;
@@ -1269,7 +1305,7 @@
 .mcp-chip.on { background: #1e2147; border-color: #3a3a5a; color: #c7c9ff; }
 
 .mcp-card-foot { display: flex; gap: 8px; }
-.mcp-discover {
+.mcp-restart {
   flex: 1;
   border: 1px solid #2a2a2a;
   background: #1b1b1b;
@@ -1279,8 +1315,8 @@
   font-size: 0.72rem;
   cursor: pointer;
 }
-.mcp-discover:hover { background: #222; color: #ddd; }
-.mcp-discover:disabled { color: #666; cursor: default; }
+.mcp-restart:hover { background: #222; color: #ddd; }
+.mcp-restart:disabled { color: #666; cursor: default; }
 .mcp-remove {
   border: 1px solid #3a2222;
   background: none;
@@ -1306,8 +1342,8 @@
   border-radius: 4px;
   padding: 2px 7px;
 }
-.mcp-tool-empty { font-size: 0.7rem; color: #777; }
-.mcp-tool-error { font-size: 0.7rem; color: #f87171; }
+/* Tools that can change things ask the user before they run. */
+.mcp-tool.confirm { color: #fbbf24; background: #2d2410; }
 
 /* ── Sign-in + splash ────────────────────────────────────────────────────── */
 .splash {

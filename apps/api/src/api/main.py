@@ -25,13 +25,13 @@ from api.routers import (  # noqa: E402
     chat,
     health,
     images,
-    mcp,
+    mcp_bridge,
     projects,
     rag,
     sessions,
     tasks,
-    workspace,
 )
+from api.services.mcp_bridge import MCPBridgeHub  # noqa: E402
 from api.services.registry import AgentRegistry  # noqa: E402
 from api.services.task_events import TaskEventHub  # noqa: E402
 
@@ -39,7 +39,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # Not traced as HTTP requests
-_UNTRACED_URLS = "/health,/chat/ws,/tasks/ws,/agents/[^/]+/heartbeat"
+_UNTRACED_URLS = "/health,/chat/ws,/tasks/ws,/mcp/bridge/ws,/agents/[^/]+/heartbeat"
 
 
 def _warn_on_insecure_config() -> None:
@@ -90,8 +90,14 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     await task_hub.start()
     app.state.task_hub = task_hub
 
+    # MCP bridge: desktops' tool inventories + agents' tool calls, via Redis.
+    mcp_hub = MCPBridgeHub(redis_client, timeout_seconds=settings.mcp_relay_timeout_seconds)
+    await mcp_hub.start()
+    app.state.mcp_hub = mcp_hub
+
     yield
     # ── Shutdown ─────────────────────────────────────────────────────────────
+    await mcp_hub.stop()
     await task_hub.stop()
     await orchestrator.shutdown()
     await engine.dispose()
@@ -106,10 +112,10 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# CORS – tighten allowed origins in production
+# CORS – any origin in debug, otherwise only CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.debug else ["app://agentide"],
+    allow_origins=["*"] if settings.debug else settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,7 +136,6 @@ app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 app.include_router(rag.router, prefix="/rag", tags=["rag"])
 app.include_router(images.router, prefix="/images", tags=["images"])
-app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
-app.include_router(workspace.router, prefix="/workspace", tags=["workspace"])
+app.include_router(mcp_bridge.router, prefix="/mcp", tags=["mcp"])
 
 

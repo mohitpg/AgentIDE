@@ -10,7 +10,9 @@ Row scoping: every user-data endpoint depends on `get_scope`, which resolves the
 `X-Project-Id` header to a project the user owns.
 
 WebSockets can't carry headers from a browser, so `/chat/ws` and `/tasks/ws`
-authenticate with a first frame instead: `{"type": "auth", "token", "project_id"}
+authenticate with a first frame instead: `{"type": "auth", "token", "project_id"}`.
+The desktop's MCP bridge (`/mcp/bridge/ws`) belongs to the user, not a project,
+so its first frame carries only the token.
 """
 
 from __future__ import annotations
@@ -171,19 +173,13 @@ async def authenticate_websocket(
     Returns the caller's scope, or closes the socket (4401 bad/expired token,
     4403 unknown project) and returns None.
     """
-    try:
-        frame = await asyncio.wait_for(websocket.receive_json(), _WS_AUTH_TIMEOUT_SECONDS)
-    except Exception:  # timeout, non-JSON, or client gone
-        await _close(websocket, WS_UNAUTHORIZED, "auth frame required")
+    received = await _receive_auth_frame(websocket)
+    if received is None:
         return None
-
-    if not isinstance(frame, dict) or frame.get("type") != "auth":
-        await _close(websocket, WS_UNAUTHORIZED, "auth frame required")
-        return None
+    user_id, frame = received
     try:
-        user_id = decode_access_token(str(frame.get("token") or ""))
         project_id = uuid.UUID(str(frame.get("project_id") or ""))
-    except (InvalidTokenError, ValueError):
+    except ValueError:
         await _close(websocket, WS_UNAUTHORIZED, "invalid token")
         return None
 
@@ -195,6 +191,44 @@ async def authenticate_websocket(
             await _close(websocket, WS_FORBIDDEN, "project not found")
             return None
     return Scope(user_id=user_id, project_id=project_id)
+
+
+async def authenticate_websocket_user(
+    websocket: WebSocket, *, session_factory: async_sessionmaker = AsyncSessionLocal
+) -> uuid.UUID | None:
+    """First-frame auth for a socket that belongs to a user, not a project.
+
+    Expects `{"type": "auth", "token"}`. Returns the user's id, or closes the
+    socket with 4401 and returns None.
+    """
+    received = await _receive_auth_frame(websocket)
+    if received is None:
+        return None
+    user_id, _ = received
+    async with session_factory() as db:
+        if await _active_user(db, user_id) is None:
+            await _close(websocket, WS_UNAUTHORIZED, "account disabled")
+            return None
+    return user_id
+
+
+async def _receive_auth_frame(websocket: WebSocket) -> tuple[uuid.UUID, dict] | None:
+    """Read the first frame and verify its token; close the socket (4401) if bad."""
+    try:
+        frame = await asyncio.wait_for(websocket.receive_json(), _WS_AUTH_TIMEOUT_SECONDS)
+    except Exception:  # timeout, non-JSON, or client gone
+        await _close(websocket, WS_UNAUTHORIZED, "auth frame required")
+        return None
+
+    if not isinstance(frame, dict) or frame.get("type") != "auth":
+        await _close(websocket, WS_UNAUTHORIZED, "auth frame required")
+        return None
+    try:
+        user_id = decode_access_token(str(frame.get("token") or ""))
+    except InvalidTokenError:
+        await _close(websocket, WS_UNAUTHORIZED, "invalid token")
+        return None
+    return user_id, frame
 
 
 async def _close(websocket: WebSocket, code: int, reason: str) -> None:

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_common.base import BaseAgent
+from agent_common.config import get_agent_settings
 from agent_common.llm import build_chat_model
 from agent_common.scope import current_scope
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
@@ -89,7 +90,7 @@ class RagAgent(BaseAgent):
         database_url: str | None = None,
         **kwargs: object,
     ) -> None:
-        kwargs.setdefault("url", "http://localhost:8103")
+        kwargs.setdefault("url", get_agent_settings().agent_public_url or "http://localhost:8103")
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._pipeline = pipeline or RagPipeline(_config_from_env())
         self._chat_model = chat_model
