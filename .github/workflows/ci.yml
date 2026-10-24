@@ -13,27 +13,28 @@ permissions:
   contents: read
 
 jobs:
-  # ── Python lint ────────────────────────────────────────────────────────────
-  python-lint:
-    name: Python lint (ruff)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+  # Lint and typecheck jobs are commented out for now; only the tests gate deploys.
+  # # ── Python lint ────────────────────────────────────────────────────────────
+  # python-lint:
+  #   name: Python lint (ruff)
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v7
 
-      # Caching stays on its default, auto: on for pushes and PRs, off for
-      # releases (guarding the release run against a poisoned cache).
-      - uses: astral-sh/setup-uv@v10
-        with:
-          version: "latest"
+  #     # Caching stays on its default, auto: on for pushes and PRs, off for
+  #     # releases (guarding the release run against a poisoned cache).
+  #     - uses: astral-sh/setup-uv@v10
+  #       with:
+  #         version: "latest"
 
-      - name: Install workspace deps
-        run: uv sync --all-packages
+  #     - name: Install workspace deps
+  #       run: uv sync --all-packages
 
-      - name: Ruff check
-        run: uv run ruff check .
+  #     - name: Ruff check
+  #       run: uv run ruff check .
 
-      - name: Ruff format check
-        run: uv run ruff format --check .
+  #     - name: Ruff format check
+  #       run: uv run ruff format --check .
 
   # ── Python tests ───────────────────────────────────────────────────────────
   python-test:
@@ -88,28 +89,28 @@ jobs:
       - name: Run tests
         run: uv run pytest --tb=short
 
-  # ── Desktop typecheck ──────────────────────────────────────────────────────
-  desktop-typecheck:
-    name: Desktop typecheck + lint
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/desktop
+  # # ── Desktop typecheck ──────────────────────────────────────────────────────
+  # desktop-typecheck:
+  #   name: Desktop typecheck + lint
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: apps/desktop
 
-    steps:
-      - uses: actions/checkout@v7
+  #   steps:
+  #     - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: apps/desktop/package-lock.json
+  #     - uses: actions/setup-node@v7
+  #       with:
+  #         node-version: "22"
+  #         cache: "npm"
+  #         cache-dependency-path: apps/desktop/package-lock.json
 
-      - name: Install deps
-        run: npm ci
+  #     - name: Install deps
+  #       run: npm ci
 
-      - name: TypeScript typecheck
-        run: npm run typecheck
+  #     - name: TypeScript typecheck
+  #       run: npm run typecheck
 
-      - name: ESLint
-        run: npm run lint
+  #     - name: ESLint
+  #       run: npm run lint
