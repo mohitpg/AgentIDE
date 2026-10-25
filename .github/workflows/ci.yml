@@ -23,7 +23,7 @@ jobs:
 
   #     # Caching stays on its default, auto: on for pushes and PRs, off for
   #     # releases (guarding the release run against a poisoned cache).
-  #     - uses: astral-sh/setup-uv@v10
+  #     - uses: astral-sh/setup-uv@v10.3.2  # no floating v10 tag exists
   #       with:
   #         version: "latest"
 
@@ -76,7 +76,7 @@ jobs:
 
       # Caching stays on its default, auto: on for pushes and PRs, off for
       # releases (guarding the release run against a poisoned cache).
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2  # no floating v10 tag exists
         with:
           version: "latest"
 
