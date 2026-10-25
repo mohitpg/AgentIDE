@@ -121,6 +121,23 @@ The data chart is upgraded only by hand, with the `data` step or the
 `helm upgrade` command at the top of its `values.yaml`. Its StatefulSets' volume
 sizes are fixed when they're created. To grow one, edit its PVC.
 
+## Pausing
+
+To stop paying for compute between sessions, [`stop.sh`](stop.sh) scales every
+Deployment and StatefulSet to zero and hibernates the Postgres clusters. Volumes,
+secrets, IPs and the Ingress stay, so `resume` is back in a few minutes:
+
+```bash
+PROJECT_ID=<your-project> bash infra/gcp/stop.sh            # pause dev and prod
+PROJECT_ID=<your-project> bash infra/gcp/stop.sh resume
+PROJECT_ID=<your-project> ENVS=dev bash infra/gcp/stop.sh   # just dev
+```
+
+While paused you still pay for the disks, static IPs, the load balancers'
+forwarding rules and storage. The cluster fee is covered by the GKE free tier
+for one cluster. Resume before deploying: a deploy brings the app pods back but
+not Postgres.
+
 ## Tearing down
 
 Delete the namespaces first. That releases the load balancers and the volumes'

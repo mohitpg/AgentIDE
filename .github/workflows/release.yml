@@ -198,5 +198,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.meta.outputs.release-tag }}
         run: |
-          ls -l installers
-          gh release upload "$TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"
+          # The artifacts keep electron-builder's release/<version>/ folder,
+          # so upload the files at any depth.
+          mapfile -t files < <(find installers -type f)
+          printf '%s\n' "${files[@]}"
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no installers downloaded"; exit 1; }
+          gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"

@@ -2,11 +2,13 @@ name: Deploy dev
 
 # Every push to main: checks, then images tagged sha-<short>, then a deploy to
 # agentide-dev, then desktop installers for the dev API as workflow artifacts.
-# Run it by hand (workflow_dispatch) to put another branch on dev.
+# Run it by hand (workflow_dispatch) to put another branch on dev. Pushes that
+# change only Markdown files don't deploy.
 
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
   workflow_dispatch:
 
 # Runs go one at a time, in order. A newer push waiting here replaces an older
