@@ -2,9 +2,6 @@
 # gcp.region, ingress.host (dev-api.<ip-dashed>.sslip.io) and image.tag.
 env: dev
 
-config:
-  logLevel: DEBUG
-
 worker:
   concurrency: 1
   resources:

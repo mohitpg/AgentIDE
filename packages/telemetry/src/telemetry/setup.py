@@ -11,6 +11,8 @@ OTLP/HTTP (protobuf):
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import logging
 from collections.abc import Sequence
 
@@ -156,20 +158,26 @@ def _install_log_handler(provider: LoggerProvider, level_name: str) -> None:
             quiet.setLevel(logging.WARNING)
 
 
+# (library, instrumentor module, instrumentor class). httpx propagates
+# `traceparent` on A2A calls, so agent spans join the turn's trace; Celery does
+# the same through task headers (gateway → worker).
+_INSTRUMENTED_LIBRARIES = (
+    ("httpx", "opentelemetry.instrumentation.httpx", "HTTPXClientInstrumentor"),
+    ("asyncpg", "opentelemetry.instrumentation.asyncpg", "AsyncPGInstrumentor"),
+    ("redis", "opentelemetry.instrumentation.redis", "RedisInstrumentor"),
+    ("celery", "opentelemetry.instrumentation.celery", "CeleryInstrumentor"),
+)
+
+
 def _instrument_libraries() -> None:
     """Client-side auto-instrumentation shared by every service.
 
-    Imported lazily so `import telemetry` stays cheap; each instrumentor is a
-    no-op for a library the process never touches.
+    Imported lazily so `import telemetry` stays cheap. Each instrumentor imports
+    the library it wraps, and a service's image only has its own dependencies
+    (the agents have no asyncpg, Redis or Celery), so missing libraries are
+    skipped.
     """
-    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
-    from opentelemetry.instrumentation.celery import CeleryInstrumentor
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-    from opentelemetry.instrumentation.redis import RedisInstrumentor
-
-    # httpx propagates `traceparent` on A2A calls, so agent spans join the turn's
-    # trace; Celery does the same through task headers (gateway → worker).
-    HTTPXClientInstrumentor().instrument()
-    AsyncPGInstrumentor().instrument()
-    RedisInstrumentor().instrument()
-    CeleryInstrumentor().instrument()
+    for library, module, instrumentor in _INSTRUMENTED_LIBRARIES:
+        if importlib.util.find_spec(library) is None:
+            continue
+        getattr(importlib.import_module(module), instrumentor)().instrument()
